@@ -75,7 +75,8 @@ main section { padding: 34px 0 6px; scroll-margin-top: 10px; }
 .grid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); }
 .grid.recs { grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); }
 .stack { display: grid; gap: 16px; }
-.empty { text-align: center; color: var(--muted); padding: 40px 16px; }
+.empty { text-align: center; color: var(--muted); padding: 40px 16px; margin: 0; }
+.grid > .empty { grid-column: 1 / -1; }
 
 .tag { display: inline-block; font-size: .78rem; font-weight: 700; background: var(--sea-soft); color: var(--sea); padding: 1px 10px; border-radius: 99px; }
 .tag.gold { background: #fdf3dc; color: var(--gold); }

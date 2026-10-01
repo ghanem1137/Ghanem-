@@ -102,11 +102,12 @@ function renderMatches() {
       <div class="teams"><span>${esc(m.home)}</span><span class="vs">VS</span><span>${esc(m.away)}</span></div>
       <div class="match-meta">${m.stadium ? `🏟️ ${esc(m.stadium)}` : ''} ${m.channel ? `<span>📺 ${esc(m.channel)}</span>` : ''}</div>
       ${interact(m.id)}
-    </article>`).join('') || '<p class="muted">المباريات تنزل قريب…</p>';
+    </article>`).join('') || '<p class="card empty">⚽ مباريات الويكند تنزل قريب… جهّز القهوة!</p>';
 }
 
 function renderPoll() {
   const p = state.poll;
+  if (!p.home || !p.away) { $('#poll-box').innerHTML = '<p class="empty" style="padding:24px 8px">🔮 استطلاع التوقعات ينزل مع مباريات الويكند… خلّك جاهز!</p>'; return; }
   const c = p.counts;
   const total = c.home + c.away + c.draw;
   const voted = !!p.myVote;
@@ -156,7 +157,7 @@ function renderRecs() {
         ${isBook ? `<div class="qr" data-qr="${esc(link)}" title="امسح الكود من جوالك"></div>` : ''}</div>` : ''}
       ${interact(r.id)}
     </article>`;
-  }).join('') || '<p class="muted">ما فيه توصيات هالأسبوع، شاركنا وحدة من الصندوق تحت 👇</p>';
+  }).join('') || '<p class="card empty">💡 ما فيه توصيات للحين، كن أول من يشاركنا وحدة من الصندوق تحت 👇</p>';
   document.querySelectorAll('#recs-list [data-qr]').forEach((el) => qr(el, el.dataset.qr));
 }
 
@@ -194,7 +195,7 @@ function renderCreative() {
       ${link ? `<a class="btn sm" href="${esc(link)}" target="_blank" rel="noopener">${c.type === 'podcast' ? '🎧 استمع' : '🔗 افتح'}</a>` : ''}
       ${interact(c.id)}
     </article>`;
-  }).join('') || '<p class="muted">عندك مقالة أو قصيدة؟ أرسلها لنا من الصندوق تحت ✍️</p>';
+  }).join('') || '<p class="card empty">✍️ عندك مقالة أو بودكاست أو قصيدة؟ أرسلها لنا من الصندوق تحت</p>';
 }
 
 function renderSelfdev() {
@@ -208,12 +209,18 @@ function renderSelfdev() {
       ${link ? `<a class="btn sm ghost" href="${esc(link)}" target="_blank" rel="noopener">كمّل القراءة</a>` : ''}
       ${interact(s.id)}
     </article>`;
-  }).join('');
+  }).join('') || '<p class="card empty">🌱 قريباً… وإذا عندك مقالة نفعتك شاركنا فيها من الصندوق تحت</p>';
 }
 
 let quizKey = '';
 function renderQuiz() {
   const q = state.quiz;
+  if (!q.question) {
+    $('#quiz-interact').innerHTML = '';
+    quizKey = '';
+    $('#quiz-main').innerHTML = '<p class="empty" style="padding:24px 8px">🧩 سؤال الويكند ينزل قريب… جهّز عقلك! وعندك سؤال حلو؟ أرسله من الصندوق تحت.</p>';
+    return;
+  }
   // لا نعيد رسم النموذج إذا ما تغيّر شي، عشان ما يضيع اللي كتبه الموظف
   const key = JSON.stringify([q.id, q.question, q.hint, q.prize, q.closed, q.answered, q.winner, q.answersCount, q.accepted]);
   $('#quiz-interact').innerHTML = interact(q.id);

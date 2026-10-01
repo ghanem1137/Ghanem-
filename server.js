@@ -21,41 +21,21 @@ const now = () => new Date().toISOString();
 // ---------- البيانات ----------
 
 function seed() {
+  // بداية جديدة: العدد الأول بدون أي محتوى، وفريق النشرة يعبّيه من لوحة الإدارة
   return {
     issue: {
       number: 1,
       title: 'ويكند سعيد',
-      greeting: 'هلا والله! خلّصنا الأسبوع على خير، وهذا عددنا الجديد عشان تبدأ الويكند برواق 😊',
-      dateFrom: '', dateTo: '',
-      quote: 'الراحة مو كسل… الراحة وقود للأسبوع الجاي.',
+      greeting: 'هلا والله! هذا أول عدد من نشرتنا، وبنكمّلها سوا كل ويكند 😊',
+      dateFrom: '', dateTo: '', quote: '',
     },
-    matches: [
-      { id: id(), league: 'دوري روشن السعودي', home: 'الهلال', away: 'النصر', day: 'الجمعة', time: '9:00 م', channel: 'SSC 1', stadium: 'المملكة أرينا' },
-      { id: id(), league: 'دوري روشن السعودي', home: 'الاتحاد', away: 'الأهلي', day: 'السبت', time: '8:30 م', channel: 'SSC 1', stadium: 'الجوهرة المشعة' },
-      { id: id(), league: 'الدوري الإسباني', home: 'ريال مدريد', away: 'برشلونة', day: 'السبت', time: '10:00 م', channel: 'beIN Sports 1', stadium: 'سانتياغو برنابيو' },
-      { id: id(), league: 'الدوري الإنجليزي', home: 'ليفربول', away: 'مانشستر سيتي', day: 'الجمعة', time: '7:30 م', channel: 'beIN Sports 2', stadium: 'أنفيلد' },
-    ],
-    poll: { id: id(), question: 'مين تتوقع يفوز في الكلاسيكو؟', home: 'الهلال', away: 'النصر', allowDraw: true, closed: false, votes: {} },
-    recommendations: [
-      { id: id(), category: 'cafe', title: 'قهوة الجمعة', colleague: 'أحمد', itemName: 'كافيه المرسى', description: 'قهوتهم المختصة ممتازة والجلسة على البحر تفتح النفس.', location: 'كورنيش جازان', link: '' },
-      { id: id(), category: 'restaurant', title: 'عشاء الويكند', colleague: 'سارة', itemName: 'مطعم البيت الجازاني', description: 'جربوا المغش والحنيذ، طعم ولا أروع.', location: 'جازان', link: '' },
-      { id: id(), category: 'movie', title: 'فيلم السهرة', colleague: 'خالد', itemName: 'The Martian', description: 'فيلم خفيف وممتع عن الصبر وحل المشكلات.', location: '', link: '' },
-      { id: id(), category: 'book', title: 'كتاب الويكند', colleague: 'نورة', itemName: 'العادات الذرية', description: 'تغييرات صغيرة تصنع فرق كبير، أسلوبه سهل ومشوّق.', location: '', link: '' },
-    ],
-    creative: [
-      { id: id(), type: 'poem', title: 'صباح جازان', author: 'محمد', body: 'يا صباحٍ فيه ريحة فلّ جازان\nوالبحر يضحك لنا من غير ميعاد', link: '' },
-    ],
-    selfdev: [
-      { id: id(), title: 'قاعدة الدقيقتين', summary: 'إذا المهمة تاخذ أقل من دقيقتين، سوّها الحين ولا تأجلها. بسيطة لكنها تخفف الزحمة اللي في راسك.', source: 'ديفيد آلن', link: '', readMinutes: 3 },
-    ],
-    occasions: [
-      { id: id(), type: 'welcome', person: 'ريم', text: 'حيّاك الله في فريقنا، نتمنى لك بداية حلوة!' },
-    ],
-    quiz: {
-      id: id(), question: 'وش اسم الجزيرة الشهيرة التابعة لجازان واللي تعتبر وجهة سياحية في البحر الأحمر؟',
-      hint: 'تبدأ بحرف الفاء 😉', accepted: ['فرسان', 'جزيرة فرسان', 'جزر فرسان'],
-      prize: 'كوبون قهوة ☕', closed: false, winner: null, answers: [],
-    },
+    matches: [],
+    poll: { id: id(), question: '', home: '', away: '', allowDraw: true, closed: false, votes: {} },
+    recommendations: [],
+    creative: [],
+    selfdev: [],
+    occasions: [],
+    quiz: { id: id(), question: '', hint: '', accepted: [], prize: '', closed: false, winner: null, answers: [] },
     photos: [],
     featuredPhotoId: null,
     likes: {},      // targetId -> [voterId]
@@ -213,6 +193,7 @@ async function api(req, res, url) {
   // --- مشاركات الموظفين ---
   if (m === 'POST' && p === '/api/poll/vote') {
     need(voterId, 'معرّف غير موجود');
+    need(db.poll.home && db.poll.away, 'ما فيه استطلاع حالياً');
     need(!db.poll.closed, 'الاستطلاع مقفل');
     need(['home', 'draw', 'away'].includes(body.choice) && (body.choice !== 'draw' || db.poll.allowDraw), 'اختيار غير صالح');
     db.poll.votes[voterId] = body.choice;
@@ -241,6 +222,7 @@ async function api(req, res, url) {
 
   if (m === 'POST' && p === '/api/quiz/answer') {
     need(voterId, 'معرّف غير موجود');
+    need(db.quiz.question, 'ما فيه مسابقة حالياً');
     need(!db.quiz.closed, 'المسابقة انتهت، انتظرونا العدد الجاي');
     need(!db.quiz.answers.some((a) => a.voterId === voterId), 'شاركت من قبل، بالتوفيق!');
     const a = { id: id(), voterId, name: str(body.name, 60), dept: str(body.dept, 60), answer: str(body.answer, 200), createdAt: now() };
