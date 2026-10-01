@@ -1,0 +1,13 @@
+{
+  "name": "weekend-saeed",
+  "version": "1.0.0",
+  "description": "ويكند سعيد — نشرة تفاعلية أسبوعية لموظفي المكتب",
+  "main": "server.js",
+  "private": true,
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
