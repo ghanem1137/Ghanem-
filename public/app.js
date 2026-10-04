@@ -6,9 +6,6 @@ const openComments = new Set();
 const drafts = {};
 const $ = (s, el = document) => el.querySelector(s);
 
-// الاسم يتذكره المتصفح عشان ما تكتبه كل مرة
-const savedName = () => store.get('wk-name') || '';
-document.querySelectorAll('.js-name').forEach((i) => { i.value = savedName(); });
 
 // ---------- التفاعل: إعجاب + تعليقات ----------
 
@@ -24,9 +21,9 @@ function interact(targetId) {
     </div>
     ${open ? `
     <div class="comments">
-      ${cs.map((c) => `<div class="comment"><b>${esc(c.name)}</b> <span class="muted">${timeAgo(c.createdAt)}</span><p>${esc(c.text)}</p></div>`).join('') || '<p class="muted small">كن أول من يعلّق 👀</p>'}
+      ${cs.map((c) => `<div class="comment"><b>${esc(c.name)}</b> <span class="muted">${timeAgo(c.createdAt)}</span>
+        ${c.mine || state.me.isAdmin ? `<button class="link-btn small" data-act="del-comment" data-id="${esc(c.id)}">حذف</button>` : ''}<p>${esc(c.text)}</p></div>`).join('') || '<p class="muted small">كن أول من يعلّق 👀</p>'}
       <form class="comment-form" data-act="comment">
-        <input name="name" placeholder="اسمك" maxlength="60" required value="${esc(savedName())}">
         <input name="text" placeholder="اكتب تعليقك…" maxlength="1000" required value="${esc(drafts[targetId] || '')}" data-draft="${esc(targetId)}">
         <button class="btn sm">نشر</button>
       </form>
@@ -48,15 +45,12 @@ document.addEventListener('click', async (e) => {
     }
     if (act === 'vote') { await api('/api/poll/vote', { method: 'POST', body: { choice: btn.dataset.choice } }); toast('تم تسجيل توقعك 👌'); await refresh(); }
     if (act === 'expand') { btn.closest('.creative-item').classList.toggle('expanded'); }
+    if (act === 'del-comment' && confirm('تحذف التعليق؟')) { await api(`/api/comments/${btn.dataset.id}`, { method: 'DELETE' }); await refresh(); }
   } catch (err) { toast(err.message, true); }
 });
 
 document.addEventListener('input', (e) => {
   if (e.target.dataset.draft) drafts[e.target.dataset.draft] = e.target.value;
-  if (e.target.name === 'name') {
-    store.set('wk-name', e.target.value.trim());
-    document.querySelectorAll('input[name=name]').forEach((i) => { if (i !== e.target && !i.value) i.value = e.target.value; });
-  }
 });
 
 document.addEventListener('submit', async (e) => {
@@ -66,7 +60,7 @@ document.addEventListener('submit', async (e) => {
   const targetId = f.closest('[data-target]').dataset.target;
   const fd = new FormData(f);
   try {
-    await api('/api/comments', { method: 'POST', body: { targetId, name: fd.get('name'), text: fd.get('text') } });
+    await api('/api/comments', { method: 'POST', body: { targetId, text: fd.get('text') } });
     delete drafts[targetId];
     await refresh();
   } catch (err) { toast(err.message, true); }
@@ -84,12 +78,31 @@ function renderIssue() {
   $('#issue-dates').textContent = d;
   $('#issue-dates').hidden = !d;
   $('#issue-quote').textContent = i.quote ? `“${i.quote}”` : '';
+  $('#issue-footer').textContent = i.footer || '';
+  $('#hello').textContent = `👋 هلا ${state.me.name}`;
+  $('#admin-link').hidden = !state.me.isAdmin;
+}
+
+// عناوين الأقسام وترتيبها وإظهارها من إعدادات الإدارة
+function renderSections() {
+  const main = $('main');
+  const nav = [];
+  for (const s of state.sections) {
+    const el = document.getElementById(s.key);
+    if (!el) continue;
+    main.appendChild(el);
+    const empty = s.key === 'occasions' && !state.occasions.length;
+    el.hidden = !s.visible || empty;
+    $('.sec-head h2', el).textContent = [s.emoji, s.title].filter(Boolean).join(' ');
+    $('.sec-head p', el).textContent = s.subtitle;
+    if (!el.hidden) nav.push(`<a href="#${s.key}">${esc([s.emoji, s.nav].filter(Boolean).join(' '))}</a>`);
+  }
+  $('#nav').innerHTML = nav.join('');
 }
 
 function renderOccasions() {
   const list = state.occasions;
-  $('#occasions-sec').hidden = !list.length;
-  $('#occasions').innerHTML = list.map((o) => {
+  $('#occasions-list').innerHTML = list.map((o) => {
     const [ic, t] = label('occasion', o.type);
     return `<div class="occasion"><span class="oc-ic">${ic}</span><div><b>${esc(t)} ${esc(o.person)}</b><p>${esc(o.text)}</p></div></div>`;
   }).join('');
@@ -226,7 +239,7 @@ function renderQuiz() {
   $('#quiz-interact').innerHTML = interact(q.id);
   if (key === quizKey) return;
   quizKey = key;
-  const pageUrl = location.origin + '/#quiz';
+  const pageUrl = (state.issue.siteUrl || location.origin) + '/#quiz';
   $('#quiz-main').innerHTML = `
     <div class="quiz-q">
       <div>
@@ -242,7 +255,6 @@ function renderQuiz() {
     : q.closed ? '<div class="winner soft">🔒 المسابقة انتهت، الفائز يُعلن قريب</div>'
     : q.answered ? '<div class="winner soft">✅ وصلتنا إجابتك، بالتوفيق في السحب!</div>'
     : `<form id="quiz-form" class="form row-form">
-        <input name="name" placeholder="اسمك" required maxlength="60" value="${esc(savedName())}">
         <input name="dept" placeholder="إدارتك (اختياري)" maxlength="60">
         <input name="answer" placeholder="إجابتك" required maxlength="200">
         <button class="btn">أرسل الإجابة</button>
@@ -296,7 +308,7 @@ $('#photo-form').addEventListener('submit', async (e) => {
   btn.disabled = true;
   try {
     const image = await readImage(f.image.files[0]);
-    await api('/api/photos', { method: 'POST', body: { name: f.name.value, caption: f.caption.value, image } });
+    await api('/api/photos', { method: 'POST', body: { caption: f.caption.value, image } });
     f.caption.value = '';
     f.image.value = '';
     formMsg(f, 'شكراً! وصلت صورتك، وبتظهر بعد مراجعة فريق النشرة 📸');
@@ -308,7 +320,7 @@ $('#suggest-form').addEventListener('submit', async (e) => {
   e.preventDefault();
   const f = e.target;
   try {
-    await api('/api/suggestions', { method: 'POST', body: Object.fromEntries(new FormData(f)) });
+    await api('/api/suggestions', { method: 'POST', body: { ...Object.fromEntries(new FormData(f)), anonymous: f.anonymous.checked } });
     f.text.value = '';
     f.link.value = '';
     formMsg(f, 'وصلت مشاركتك، شكراً لأنك جزء من النشرة 💛');
@@ -341,7 +353,7 @@ function render() {
   const focusDraft = a?.dataset?.draft;
   const sel = focusDraft ? [a.selectionStart, a.selectionEnd] : null;
 
-  renderIssue(); renderOccasions(); renderMatches(); renderPoll(); renderRecs();
+  renderIssue(); renderSections(); renderOccasions(); renderMatches(); renderPoll(); renderRecs();
   renderLens(); renderCreative(); renderSelfdev(); renderQuiz();
 
   if (focusDraft) {
@@ -352,10 +364,54 @@ function render() {
 
 async function refresh() {
   try {
+    const prevCity = state?.weatherCity;
     state = await api('/api/state');
     render();
+    document.body.classList.remove('loading');
+    if (state.weatherCity !== prevCity) loadWeather();
   } catch (err) { toast(err.message, true); }
 }
+
+// ---------- الطقس ----------
+
+async function loadWeather() {
+  const box = $('#weather');
+  if (!state.weatherCity) { box.hidden = true; return; }
+  try {
+    const { weather: w } = await api('/api/weather');
+    if (!w) { box.hidden = true; return; }
+    const [ic, txt] = weatherInfo(w.current.code);
+    // توقعات الجمعة والسبت الجايين
+    const weekend = w.days.filter((d) => [5, 6].includes(new Date(d.date + 'T12:00:00').getDay())).slice(0, 2);
+    box.innerHTML = `
+      <span class="w-now"><span class="w-ic">${ic}</span><b class="w-temp">${w.current.temp}°</b>
+        <span><b>${esc(w.city)}</b> · ${txt}<br><small>المحسوسة ${w.current.feels}° · رطوبة ${w.current.humidity}% · رياح ${w.current.wind} كم/س</small></span></span>
+      ${weekend.map((d) => {
+        const [dic] = weatherInfo(d.code);
+        const day = new Date(d.date + 'T12:00:00').getDay() === 5 ? 'الجمعة' : 'السبت';
+        return `<span class="w-day">${day} ${dic} <b>${d.max}°</b> / ${d.min}°</span>`;
+      }).join('')}`;
+    box.hidden = false;
+  } catch { box.hidden = true; }
+}
+setInterval(() => { if (state) loadWeather(); }, 30 * 6e4);
+
+// ---------- تغيير كلمة المرور ----------
+
+$('#pw-open').onclick = () => $('#pw-dialog').showModal();
+$('#pw-close').onclick = () => $('#pw-dialog').close();
+$('#pw-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const f = e.target;
+  if (f.next.value !== f.confirm.value) return formMsg(f, 'كلمتين المرور الجديدة مو متطابقة', true);
+  try {
+    await api('/api/me/password', { method: 'POST', body: { current: f.current.value, next: f.next.value } });
+    f.reset();
+    formMsg(f, '');
+    $('#pw-dialog').close();
+    toast('تم تغيير كلمة المرور ✅');
+  } catch (err) { formMsg(f, err.message, true); }
+});
 
 let pending;
 function connect() {

@@ -231,3 +231,41 @@ input:focus, textarea:focus, select:focus { outline: none; border-color: var(--s
 .admin-photos .card { padding: 10px; display: grid; gap: 8px; }
 .admin-photos img { border-radius: 10px; aspect-ratio: 4/3; object-fit: cover; width: 100%; }
 .login { max-width: 380px; margin: 80px auto; }
+
+/* ---------- شريط الطقس والمستخدم ---------- */
+body.loading main, body.loading .chips, body.loading .topbar { visibility: hidden; }
+.hero { padding-top: 0; }
+.topbar { background: rgba(0, 0, 0, .16); margin-bottom: 26px; }
+.topbar-in { display: flex; justify-content: space-between; align-items: center; gap: 10px 20px; flex-wrap: wrap; padding-top: 10px; padding-bottom: 10px; }
+.weather { display: flex; align-items: center; gap: 8px 18px; flex-wrap: wrap; }
+.w-now { display: flex; align-items: center; gap: 10px; line-height: 1.4; }
+.w-ic { font-size: 2rem; }
+.w-temp { font-size: 2rem; font-weight: 800; }
+.w-now small { opacity: .85; }
+.w-day { background: rgba(255, 255, 255, .16); border-radius: 99px; padding: 3px 12px; font-size: .92rem; white-space: nowrap; }
+.userbar { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; font-size: .95rem; }
+.userbar a, .userbar .link-btn { color: #fff; opacity: .9; text-decoration: none; }
+.userbar a:hover, .userbar .link-btn:hover { opacity: 1; text-decoration: underline; }
+.comment .link-btn { color: var(--muted); margin-inline-start: 6px; }
+
+/* ---------- الدخول ---------- */
+.login-page {
+  min-height: 100vh; display: grid; place-items: center; padding: 16px;
+  background: linear-gradient(135deg, #0e7c86 0%, #138a8f 45%, #f2994a 100%);
+}
+.login-page .login { margin: 0; width: 100%; max-width: 400px; }
+.login-head { text-align: center; }
+.login-sun { font-size: 3rem; }
+.login-head h1 { font-size: 2rem; font-weight: 800; }
+
+dialog.card { border: 1px solid var(--line); color: var(--ink); width: min(420px, calc(100% - 32px)); }
+dialog::backdrop { background: rgba(0, 0, 0, .4); }
+
+/* ---------- لوحة الإدارة: إضافات ---------- */
+.sec-row { display: grid; grid-template-columns: 70px 1fr 1fr 1.6fr auto; gap: 8px; align-items: end; }
+.sec-row .actions { padding-bottom: 6px; }
+@media (max-width: 760px) { .sec-row { grid-template-columns: 1fr 1fr; } }
+.cred { font-family: Consolas, Menlo, monospace; direction: ltr; unicode-bidi: isolate; }
+.notice { background: var(--sun-soft); border-radius: 12px; padding: 10px 14px; }
+.email-preview { border: 1px solid var(--line); border-radius: 12px; background: #fff; max-height: 600px; overflow: auto; }
+.table-wrap { overflow-x: auto; }

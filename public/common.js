@@ -6,16 +6,6 @@ const store = {
   set(k, v) { try { localStorage.setItem(k, v); } catch { /* تجاهل */ } },
 };
 
-function getVoterId() {
-  let v = store.get('wk-voter');
-  if (!v) {
-    v = (crypto.randomUUID ? crypto.randomUUID() : String(Math.random()).slice(2) + Date.now()).replace(/-/g, '');
-    store.set('wk-voter', v);
-  }
-  return v;
-}
-const VOTER = getVoterId();
-
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
 function safeUrl(u) {
@@ -26,10 +16,15 @@ function safeUrl(u) {
 async function api(path, { method = 'GET', body, headers = {} } = {}) {
   const res = await fetch(path, {
     method,
-    headers: { 'Content-Type': 'application/json', 'X-Voter-Id': VOTER, ...headers },
+    headers: { 'Content-Type': 'application/json', ...headers },
     body: body ? JSON.stringify(body) : undefined,
   });
   const data = await res.json().catch(() => ({}));
+  // انتهت الجلسة أو ما سجّل دخول: نوديه لصفحة الدخول ونرجعه لنفس المكان بعدها
+  if (res.status === 401 && !location.pathname.startsWith('/login')) {
+    location.href = '/login?next=' + encodeURIComponent(location.pathname + location.hash);
+    return new Promise(() => {});
+  }
   if (!res.ok) throw new Error(data.error || 'صار خطأ، جرّب مرة ثانية');
   return data;
 }
@@ -63,3 +58,22 @@ const LABELS = {
   occasion: { welcome: ['👋', 'أهلاً وسهلاً'], congrats: ['🎉', 'مبروك'], birthday: ['🎂', 'عيد ميلاد سعيد'], promotion: ['🚀', 'ترقية'], baby: ['🍼', 'مولود جديد'], farewell: ['🤍', 'وداعاً'] },
 };
 const label = (group, key) => LABELS[group][key] || LABELS[group].other || ['✨', key];
+
+// رموز حالة الطقس (WMO) من Open-Meteo
+function weatherInfo(code) {
+  if (code === 0) return ['☀️', 'صحو'];
+  if (code <= 2) return ['🌤️', 'غائم جزئياً'];
+  if (code === 3) return ['☁️', 'غائم'];
+  if (code <= 48) return ['🌫️', 'ضباب'];
+  if (code <= 57) return ['🌦️', 'رذاذ'];
+  if (code <= 67) return ['🌧️', 'مطر'];
+  if (code <= 77) return ['❄️', 'ثلج'];
+  if (code <= 82) return ['🌦️', 'زخات مطر'];
+  if (code <= 86) return ['🌨️', 'زخات ثلج'];
+  return ['⛈️', 'عواصف رعدية'];
+}
+
+async function logout() {
+  await fetch('/api/logout', { method: 'POST' }).catch(() => {});
+  location.href = '/login';
+}

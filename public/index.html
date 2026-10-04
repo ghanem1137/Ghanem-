@@ -9,8 +9,19 @@
   <link rel="stylesheet" href="/styles.css">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>☀️</text></svg>">
 </head>
-<body>
+<body class="loading">
   <header class="hero">
+    <div class="topbar">
+      <div class="wrap topbar-in">
+        <div class="weather" id="weather" hidden></div>
+        <div class="userbar">
+          <span id="hello"></span>
+          <a href="/admin" id="admin-link" hidden>🛠️ لوحة الإدارة</a>
+          <button type="button" class="link-btn" id="pw-open">🔑 كلمة المرور</button>
+          <button type="button" class="link-btn" onclick="logout()">خروج</button>
+        </div>
+      </div>
+    </div>
     <div class="wrap">
       <div class="hero-top">
         <span class="badge" id="issue-badge">العدد</span>
@@ -19,59 +30,38 @@
       <h1 id="issue-title">ويكند سعيد</h1>
       <p class="greeting" id="issue-greeting"></p>
       <div class="countdown" id="countdown"></div>
-      <nav class="chips">
-        <a href="#matches">⚽ المباريات</a>
-        <a href="#poll">🔮 توقّع</a>
-        <a href="#recs">💡 توصيات الزملاء</a>
-        <a href="#lens">📸 عدسة الموظف</a>
-        <a href="#creative">✍️ ركن الإبداع</a>
-        <a href="#selfdev">🌱 طوّر نفسك</a>
-        <a href="#quiz">🧩 المسابقة</a>
-        <a href="#box">📮 شاركنا</a>
-      </nav>
+      <nav class="chips" id="nav"></nav>
     </div>
   </header>
 
   <main class="wrap">
-    <section id="occasions-sec" class="occasions" hidden>
-      <div id="occasions"></div>
+    <section id="occasions" class="occasions">
+      <div class="sec-head"><h2></h2><p></p></div>
+      <div id="occasions-list"></div>
     </section>
 
     <section id="matches">
-      <div class="sec-head">
-        <h2>⚽ مباريات الويكند</h2>
-        <p>أقوى أربع مباريات الجمعة والسبت، جهّز القهوة والمكسرات 🍿</p>
-      </div>
+      <div class="sec-head"><h2></h2><p></p></div>
       <div class="grid matches" id="matches-list"></div>
     </section>
 
     <section id="poll">
-      <div class="sec-head">
-        <h2>🔮 توقّع وخلّك شجاع</h2>
-        <p>صوّت وشوف وش رأي الشباب والبنات في المكتب</p>
-      </div>
+      <div class="sec-head"><h2></h2><p></p></div>
       <div class="card poll" id="poll-box"></div>
     </section>
 
     <section id="recs">
-      <div class="sec-head">
-        <h2>💡 توصية من زميل</h2>
-        <p>مطعم، كافيه، فيلم، كتاب… من ناس تعرفهم وتثق بذوقهم</p>
-      </div>
+      <div class="sec-head"><h2></h2><p></p></div>
       <div class="grid recs" id="recs-list"></div>
     </section>
 
     <section id="lens">
-      <div class="sec-head">
-        <h2>📸 عدسة الموظف</h2>
-        <p>صوّرت شي حلو في الويكند؟ أرسله، وأحلى صورة تنزل في العدد الجاي</p>
-      </div>
+      <div class="sec-head"><h2></h2><p></p></div>
       <div id="lens-featured"></div>
       <div class="gallery" id="lens-gallery"></div>
       <details class="card form-card">
         <summary>📤 أرسل صورتك للعدد الجاي</summary>
         <form id="photo-form" class="form">
-          <label>اسمك<input name="name" required maxlength="60" class="js-name"></label>
           <label>وش قصة الصورة؟ (اختياري)<input name="caption" maxlength="200" placeholder="مثلاً: غروب الشمس من كورنيش جازان"></label>
           <label>الصورة (JPG أو PNG)<input name="image" type="file" accept="image/png,image/jpeg,image/webp" required></label>
           <button class="btn">إرسال الصورة</button>
@@ -81,37 +71,24 @@
     </section>
 
     <section id="creative">
-      <div class="sec-head">
-        <h2>✍️ ركن إبداع الزملاء</h2>
-        <p>مقالة، بودكاست، أو قصيدة… من قلم وصوت زملائنا</p>
-      </div>
+      <div class="sec-head"><h2></h2><p></p></div>
       <div class="stack" id="creative-list"></div>
     </section>
 
     <section id="selfdev">
-      <div class="sec-head">
-        <h2>🌱 طوّر نفسك على رواق</h2>
-        <p>قراءات قصيرة تنفعك بدون ما تثقل عليك</p>
-      </div>
+      <div class="sec-head"><h2></h2><p></p></div>
       <div class="grid" id="selfdev-list"></div>
     </section>
 
     <section id="quiz">
-      <div class="sec-head">
-        <h2>🧩 مسابقة الويكند السريعة</h2>
-        <p>سؤال خفيف، وجاوب صح وادخل السحب</p>
-      </div>
+      <div class="sec-head"><h2></h2><p></p></div>
       <div class="card quiz" id="quiz-box"><div id="quiz-main"></div><div id="quiz-interact"></div></div>
     </section>
 
     <section id="box">
-      <div class="sec-head">
-        <h2>📮 صندوق المشاركات والاقتراحات</h2>
-        <p>عندك توصية، مقالة، قصيدة، فكرة للعدد الجاي، أو ملاحظة؟ هذا مكانها</p>
-      </div>
+      <div class="sec-head"><h2></h2><p></p></div>
       <form id="suggest-form" class="card form">
         <div class="row">
-          <label>اسمك (اختياري)<input name="name" maxlength="60" class="js-name"></label>
           <label>نوع المشاركة
             <select name="type">
               <option>اقتراح للعدد الجاي</option>
@@ -125,6 +102,7 @@
         </div>
         <label>مشاركتك<textarea name="text" required maxlength="3000" rows="4" placeholder="اكتب براحتك…"></textarea></label>
         <label>رابط (اختياري)<input name="link" type="url" maxlength="500" placeholder="https://"></label>
+        <label class="check"><input type="checkbox" name="anonymous"> أرسلها بدون اسمي</label>
         <button class="btn">أرسل</button>
         <p class="form-msg" role="status"></p>
       </form>
@@ -134,9 +112,20 @@
   <footer class="footer">
     <div class="wrap">
       <p class="quote" id="issue-quote"></p>
-      <p class="muted">ويكند سعيد — من الفريق، للفريق 💛</p>
+      <p class="muted" id="issue-footer"></p>
     </div>
   </footer>
+
+  <dialog id="pw-dialog" class="card">
+    <form id="pw-form" class="form">
+      <h3>🔑 تغيير كلمة المرور</h3>
+      <label>كلمة المرور الحالية<input name="current" type="password" autocomplete="current-password" required dir="ltr"></label>
+      <label>كلمة المرور الجديدة (8 أحرف أو أكثر)<input name="next" type="password" autocomplete="new-password" minlength="8" required dir="ltr"></label>
+      <label>أعد كتابة الجديدة<input name="confirm" type="password" autocomplete="new-password" minlength="8" required dir="ltr"></label>
+      <div class="actions"><button class="btn">حفظ</button><button type="button" class="btn ghost" id="pw-close">إلغاء</button></div>
+      <p class="form-msg" role="status"></p>
+    </form>
+  </dialog>
 
   <div id="toast" class="toast" role="status" hidden></div>
 

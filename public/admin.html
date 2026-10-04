@@ -10,19 +10,18 @@
 </head>
 <body>
   <div class="wrap">
-    <form id="login" class="card form login" hidden>
-      <h2>🛠️ لوحة فريق النشرة</h2>
-      <label>كلمة المرور<input name="password" type="password" required autofocus></label>
-      <button class="btn">دخول</button>
-      <p class="form-msg" role="status"></p>
-    </form>
+    <div id="denied" class="card login" hidden>
+      <h2>🔒 لوحة فريق النشرة</h2>
+      <p id="denied-msg"></p>
+      <div class="actions"><a class="btn" href="/">الرجوع للنشرة</a><button class="btn ghost" onclick="logout()">دخول بحساب ثاني</button></div>
+    </div>
 
     <div id="panel" hidden>
       <div class="admin-bar">
         <h2>🛠️ إدارة ويكند سعيد</h2>
         <div class="actions">
           <a class="btn ghost sm" href="/" target="_blank">👀 عرض الصفحة</a>
-          <button class="btn ghost sm" id="logout">خروج</button>
+          <button class="btn ghost sm" onclick="logout()">خروج</button>
         </div>
       </div>
       <nav class="tabs" id="tabs"></nav>
