@@ -83,7 +83,7 @@ main section { padding: 34px 0 6px; scroll-margin-top: 10px; }
 
 /* المناسبات */
 .occasions { padding-top: 22px; }
-#occasions { display: flex; gap: 12px; overflow-x: auto; padding-bottom: 4px; }
+#occasions-list { display: flex; gap: 12px; overflow-x: auto; padding-bottom: 4px; }
 .occasion {
   flex: 0 0 auto; display: flex; gap: 10px; align-items: center; background: var(--sun-soft);
   border-radius: 14px; padding: 10px 16px; max-width: 360px;
