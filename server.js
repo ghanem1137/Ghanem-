@@ -49,6 +49,9 @@ function seed() {
       dateFrom: '', dateTo: '', quote: '',
       footer: 'ويكند سعيد — من الفريق، للفريق 💛',
       siteUrl: '',
+      orgName: 'المكتب الاستراتيجي لتطوير منطقة جازان',
+      orgNameEn: 'JAZAN REGION DEVELOPMENT STRATEGIC OFFICE',
+      logo: '',
     },
     sections: DEFAULT_SECTIONS,
     weather: { enabled: true, city: 'جازان', lat: 16.8892, lon: 42.5511 },
@@ -381,6 +384,12 @@ async function api(req, res, url) {
     return send(res, 200, { ok: true });
   }
 
+  // هوية الجهة لصفحة الدخول (بدون بيانات حساسة)
+  if (m === 'GET' && p === '/api/brand') {
+    const { title, orgName, orgNameEn, logo } = db.issue;
+    return send(res, 200, { title, orgName, orgNameEn, logo });
+  }
+
   // --- كل اللي بعد هذا يحتاج دخول ---
   const user = currentUser(req);
   if (!user) return send(res, 401, { error: 'سجّل دخولك أولاً' });
@@ -396,7 +405,7 @@ async function api(req, res, url) {
   if (m === 'GET' && p === '/api/state') return send(res, 200, publicState(user));
   if (m === 'GET' && p === '/api/weather') return send(res, 200, { weather: await getWeather() });
 
-  const body = await readBody(req, p === '/api/photos' ? 8 * 1024 * 1024 : 512 * 1024);
+  const body = await readBody(req, p === '/api/photos' || p === '/api/admin/logo' ? 8 * 1024 * 1024 : 512 * 1024);
 
   if (m === 'POST' && p === '/api/me/password') {
     need(checkPassword(String(body.current || ''), user.pass), 'كلمة المرور الحالية غير صحيحة');
@@ -490,7 +499,7 @@ async function api(req, res, url) {
         need(Array.isArray(body.items), 'بيانات غير صالحة');
         db[key] = body.items.slice(0, 50).map((it) => cleanItem(LIST_SECTIONS[key], it || {}));
       } else if (key === 'issue') {
-        for (const f of ['title', 'greeting', 'dateFrom', 'dateTo', 'quote', 'footer']) db.issue[f] = str(body[f], 1000);
+        for (const f of ['title', 'greeting', 'dateFrom', 'dateTo', 'quote', 'footer', 'orgName', 'orgNameEn']) db.issue[f] = str(body[f], 1000);
         const site = str(body.siteUrl, 300).replace(/\/+$/, '');
         need(!site || /^https?:\/\/[^\s]+$/.test(site), 'رابط المنصة لازم يبدأ بـ http:// أو https://');
         db.issue.siteUrl = site;
@@ -523,6 +532,14 @@ async function api(req, res, url) {
       }
       save(); broadcast();
       return send(res, 200, { ok: true });
+    }
+
+    if (m === 'POST' && p === '/api/admin/logo') {
+      const old = db.issue.logo;
+      db.issue.logo = body.image ? saveImage(body.image) : '';
+      if (old) deleteImage(old);
+      save(); broadcast();
+      return send(res, 200, { logo: db.issue.logo });
     }
 
     if (m === 'POST' && p === '/api/admin/quiz/draw') {
@@ -631,7 +648,7 @@ function serveStatic(req, res, url) {
   if (rel.startsWith('/uploads/')) {
     // الصور المعتمدة تظهر حتى في نسخة الإيميل، واللي تحت المراجعة للإدارة فقط
     const photo = db.photos.find((x) => x.url === rel);
-    const visible = photo && (photo.approved || photo.id === db.featuredPhotoId);
+    const visible = rel === db.issue.logo || (photo && (photo.approved || photo.id === db.featuredPhotoId));
     if (!visible && !currentUser(req)?.isAdmin) { res.writeHead(404); return res.end(); }
     root = UPLOAD_DIR;
     rel = rel.slice('/uploads'.length);

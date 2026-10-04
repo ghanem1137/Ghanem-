@@ -72,14 +72,14 @@ function renderIssue() {
   const i = state.issue;
   document.title = i.title || 'ويكند سعيد';
   $('#issue-title').textContent = i.title || 'ويكند سعيد';
-  $('#issue-badge').textContent = `العدد ${i.number}`;
+  $('#issue-no').textContent = arNum(i.number);
   $('#issue-greeting').textContent = i.greeting;
   const d = [fmtDate(i.dateFrom), fmtDate(i.dateTo)].filter(Boolean).join(' – ');
-  $('#issue-dates').textContent = d;
-  $('#issue-dates').hidden = !d;
+  $('#issue-dates').textContent = d ? ` · ${d}` : '';
+  renderBrand(i);
   $('#issue-quote').textContent = i.quote ? `“${i.quote}”` : '';
   $('#issue-footer').textContent = i.footer || '';
-  $('#hello').textContent = `👋 هلا ${state.me.name}`;
+  $('#hello').textContent = `هلا ${state.me.name} 👋`;
   $('#admin-link').hidden = !state.me.isAdmin;
 }
 
@@ -91,6 +91,7 @@ function renderSections() {
     const el = document.getElementById(s.key);
     if (!el) continue;
     main.appendChild(el);
+    el.dataset.acc = String(state.sections.indexOf(s) % 6);
     const empty = s.key === 'occasions' && !state.occasions.length;
     el.hidden = !s.visible || empty;
     $('.sec-head h2', el).textContent = [s.emoji, s.title].filter(Boolean).join(' ');
@@ -333,15 +334,40 @@ function renderCountdown() {
   const el = $('#countdown');
   const d = new Date();
   const day = d.getDay(); // 5 = الجمعة، 6 = السبت
-  if (day === 5 || day === 6) { el.textContent = '🌴 الويكند بدأ! استمتع وارتاح، وشوفنا الأحد بطاقة'; return; }
+  const card = (num, label, sub) => `<b class="stat-num">${num}</b><span class="stat-label">${label}</span><small>${sub}</small>`;
+  if (day === 5 || day === 6) { el.innerHTML = card('🌴', 'الويكند بدأ!', 'استمتع وارتاح، وشوفنا الأحد بطاقة'); return; }
   const end = new Date(d);
   end.setDate(d.getDate() + ((4 - day + 7) % 7));
   end.setHours(16, 0, 0, 0); // الخميس الساعة 4 العصر
-  if (end <= d) { el.textContent = '🎉 خلص الدوام! ويكند سعيد'; return; }
+  if (end <= d) { el.innerHTML = card('🎉', 'خلص الدوام!', 'ويكند سعيد'); return; }
   const ms = end - d;
   const dd = Math.floor(ms / 864e5), hh = Math.floor((ms % 864e5) / 36e5), mm = Math.floor((ms % 36e5) / 6e4);
-  el.innerHTML = `⏳ باقي على الويكند: ${dd ? `<b>${dd}</b> يوم ` : ''}<b>${hh}</b> ساعة <b>${mm}</b> دقيقة`;
+  el.innerHTML = dd
+    ? card(arNum(dd), dd === 1 ? 'يوم على الويكند' : 'أيام على الويكند', `و ${arNum(hh)} ساعة · نهاية الدوام الخميس`)
+    : card(`${arNum(hh)}:${arNum(String(mm).padStart(2, '0'))}`, 'ساعة على الويكند', 'نهاية الدوام الخميس ٤ العصر');
 }
+
+// ---------- الهوية والوقت والتاريخ ----------
+
+function renderBrand(i) {
+  $('#org-name').textContent = i.orgName || '';
+  $('#org-name-en').textContent = i.orgNameEn || '';
+  const logo = $('#org-logo');
+  logo.hidden = !i.logo;
+  if (i.logo && logo.getAttribute('src') !== i.logo) logo.src = i.logo;
+}
+
+const TZ = 'Asia/Riyadh';
+function renderClock() {
+  const d = new Date();
+  $('#today-name').textContent = d.toLocaleDateString('ar-SA', { weekday: 'long', timeZone: TZ });
+  $('#today').textContent = d.toLocaleDateString('ar-SA-u-ca-gregory', { day: 'numeric', month: 'long', year: 'numeric', timeZone: TZ });
+  $('#today-hijri').textContent = d.toLocaleDateString('ar-SA-u-ca-islamic-umalqura', { day: 'numeric', month: 'long', year: 'numeric', timeZone: TZ });
+  $('#clock').textContent = d.toLocaleTimeString('ar-SA', { hour: 'numeric', minute: '2-digit', timeZone: TZ });
+}
+renderClock();
+setInterval(renderClock, 15000);
+
 renderCountdown();
 setInterval(renderCountdown, 30000);
 
@@ -375,24 +401,26 @@ async function refresh() {
 // ---------- الطقس ----------
 
 async function loadWeather() {
-  const box = $('#weather');
-  if (!state.weatherCity) { box.hidden = true; return; }
+  const cards = ['#weather', '#w-fri', '#w-sat'].map((x) => $(x));
+  const hide = () => cards.forEach((c) => { c.hidden = true; });
+  if (!state.weatherCity) return hide();
   try {
     const { weather: w } = await api('/api/weather');
-    if (!w) { box.hidden = true; return; }
+    if (!w) return hide();
     const [ic, txt] = weatherInfo(w.current.code);
+    cards[0].innerHTML = `<b class="stat-num">${arNum(w.current.temp)}°</b><span class="stat-label">${ic} ${esc(w.city)} الآن · ${txt}</span>
+      <small>المحسوسة ${arNum(w.current.feels)}° · رطوبة ${arNum(w.current.humidity)}٪ · رياح ${arNum(w.current.wind)} كم/س</small>`;
     // توقعات الجمعة والسبت الجايين
-    const weekend = w.days.filter((d) => [5, 6].includes(new Date(d.date + 'T12:00:00').getDay())).slice(0, 2);
-    box.innerHTML = `
-      <span class="w-now"><span class="w-ic">${ic}</span><b class="w-temp">${w.current.temp}°</b>
-        <span><b>${esc(w.city)}</b> · ${txt}<br><small>المحسوسة ${w.current.feels}° · رطوبة ${w.current.humidity}% · رياح ${w.current.wind} كم/س</small></span></span>
-      ${weekend.map((d) => {
-        const [dic] = weatherInfo(d.code);
-        const day = new Date(d.date + 'T12:00:00').getDay() === 5 ? 'الجمعة' : 'السبت';
-        return `<span class="w-day">${day} ${dic} <b>${d.max}°</b> / ${d.min}°</span>`;
-      }).join('')}`;
-    box.hidden = false;
-  } catch { box.hidden = true; }
+    for (const [n, card] of [[5, cards[1]], [6, cards[2]]]) {
+      const day = w.days.find((x) => new Date(x.date + 'T12:00:00').getDay() === n);
+      card.hidden = !day;
+      if (!day) continue;
+      const [dic, dtxt] = weatherInfo(day.code);
+      card.innerHTML = `<b class="stat-num">${arNum(day.max)}°</b><span class="stat-label">${dic} ${n === 5 ? 'الجمعة' : 'السبت'} · ${dtxt}</span>
+        <small>الصغرى ${arNum(day.min)}° · العظمى ${arNum(day.max)}°</small>`;
+    }
+    cards[0].hidden = false;
+  } catch { hide(); }
 }
 setInterval(() => { if (state) loadWeather(); }, 30 * 6e4);
 

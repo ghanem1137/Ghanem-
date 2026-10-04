@@ -73,7 +73,7 @@ function listEditor(key) {
   const items = pub[key];
   const one = (it, i) => `
     <div class="item-editor" data-id="${esc(it.id || '')}">
-      <div class="head"><b>${esc(lbl)} ${i + 1}</b>
+      <div class="head"><b><span class="drag" title="اسحب لتغيير المكان">⠿</span> ${esc(lbl)} ${i + 1}</b>
         <div class="actions">
           <button type="button" class="pill" data-move="-1" title="لفوق">⬆️</button>
           <button type="button" class="pill" data-move="1" title="لتحت">⬇️</button>
@@ -83,10 +83,11 @@ function listEditor(key) {
     </div>`;
   return `
     <form class="form" id="list-form">
+      ${items.length > 1 ? '<p class="muted small">رتّب الأماكن بسحب ⠿ أو بالأسهم، وبعدها اضغط حفظ ونشر.</p>' : ''}
       <div class="editor-list">${items.map(one).join('') || '<p class="muted">ما فيه عناصر بعد.</p>'}</div>
       <div class="actions">
         <button type="button" class="btn ghost" id="add-item">➕ إضافة ${esc(lbl)}</button>
-        <button class="btn">💾 حفظ ونشر</button>
+        <button class="btn" id="save-list">💾 حفظ ونشر</button>
       </div>
     </form>`;
 }
@@ -115,6 +116,11 @@ function bindList(key) {
       renderTab();
     }
   });
+  enableDrag($('.editor-list', form), () => {
+    pub[key] = collectList(form);
+    renderTab();
+    $('#save-list').textContent = '💾 حفظ ونشر (الترتيب تغيّر)';
+  });
   $('#add-item').onclick = () => {
     pub[key] = [...collectList(form), {}];
     renderTab();
@@ -141,6 +147,13 @@ const views = {
       ${field('greeting', 'كلمة الترحيب', 'textarea', i.greeting)}
       ${field('quote', 'اقتباس الأسبوع (يطلع في آخر الصفحة)', 'text', i.quote)}
       ${field('footer', 'سطر نهاية الصفحة', 'text', i.footer)}
+      <h3 style="margin-top:10px">🏛️ هوية الجهة</h3>
+      <div class="row">${field('orgName', 'اسم الجهة', 'text', i.orgName)}${field('orgNameEn', 'اسم الجهة بالإنجليزي', 'text', i.orgNameEn)}</div>
+      <div class="logo-row">
+        ${i.logo ? `<img src="${esc(i.logo)}" alt="الشعار الحالي">` : '<span class="muted">ما فيه شعار مرفوع</span>'}
+        <label class="btn ghost sm">⬆️ رفع الشعار (PNG بخلفية شفافة أفضل)<input type="file" id="logo-file" accept="image/png,image/jpeg,image/webp" hidden></label>
+        ${i.logo ? '<button type="button" class="pill" id="logo-del">حذف الشعار</button>' : ''}
+      </div>
       ${field('siteUrl', 'رابط المنصة للموظفين (يُستخدم في QR والإيميلات)، مثل http://192.168.1.25:3000', 'url', i.siteUrl)}
       <p class="muted small">إذا تركته فاضي نستخدم الرابط اللي فاتح منه الحين: <span class="cred">${esc(location.origin)}</span></p>
       <button class="btn">💾 حفظ ونشر</button></form>`;
@@ -148,10 +161,11 @@ const views = {
   sections() {
     const w = priv.weather;
     const row = (s, i) => `
-      <div class="item-editor" data-key="${s.key}">
-        <div class="head"><b>${i + 1}. ${esc(s.emoji)} ${esc(s.title)}</b>
+      <div class="item-editor ${s.visible ? '' : 'hidden-sec'}" data-key="${s.key}">
+        <div class="head"><b><span class="drag" title="اسحب لتغيير المكان">⠿</span> ${i + 1}. ${esc(s.emoji)} ${esc(s.title)}
+          <span class="state ${s.visible ? 'on' : 'off'}">${s.visible ? 'ظاهر' : 'مخفي'}</span></b>
           <div class="actions">
-            ${check('visible', 'ظاهر', s.visible)}
+            ${check('visible', 'ظاهر للموظفين', s.visible)}
             <button type="button" class="pill" data-smove="-1" title="لفوق">⬆️</button>
             <button type="button" class="pill" data-smove="1" title="لتحت">⬇️</button>
           </div></div>
@@ -160,7 +174,8 @@ const views = {
           ${field('title', 'العنوان', 'text', s.title)}${field('subtitle', 'العنوان الفرعي', 'text', s.subtitle)}
         </div>
       </div>`;
-    return `<p class="notice">✏️ غيّر عناوين الأقسام وعناوينها الفرعية متى ما تبي، ورتّبها بالأسهم، وأخفِ أي قسم ما تحتاجه هالفترة. التغيير يظهر للموظفين على طول.</p>
+    return `<p class="notice">✏️ غيّر عناوين الأقسام وعناوينها الفرعية متى ما تبي. رتّب أماكنها في الصفحة بسحب ⠿ أو بالأسهم.
+      إذا ما فيه مشاركة في قسم هالأسبوع، شيل علامة "ظاهر للموظفين" ومحتواه يبقى محفوظ، وترجّعه الأسبوع الجاي بنفس الطريقة.</p>
       <form class="form" id="f-sections" style="margin-top:14px">
         <div class="editor-list">${pub.sections.map(row).join('')}</div>
         <button class="btn">💾 حفظ العناوين والترتيب</button>
@@ -284,11 +299,80 @@ function formData(f) {
   return o;
 }
 
+// ---------- إظهار/إخفاء القسم من تبويبه ----------
+
+const TAB_SECTION = {
+  matches: 'matches', poll: 'poll', recommendations: 'recs', lens: 'lens', creative: 'creative',
+  selfdev: 'selfdev', occasions: 'occasions', quiz: 'quiz', box: 'box',
+};
+
+function visBar() {
+  const sec = pub.sections.find((x) => x.key === TAB_SECTION[tab]);
+  if (!sec) return '';
+  return `<div class="vis-bar ${sec.visible ? '' : 'off'}" id="vis-bar">
+    <span>${sec.visible
+      ? '<span class="state on">ظاهر</span> هذا القسم ظاهر للموظفين في الصفحة'
+      : '<span class="state off">مخفي</span> هذا القسم مخفي عن الموظفين، ومحتواه محفوظ لين ترجّعه'}</span>
+    <button type="button" class="btn sm ${sec.visible ? 'ghost' : ''}" id="toggle-vis">${sec.visible ? '🙈 إخفاء القسم هذا الأسبوع' : '👁️ إظهار القسم'}</button>
+  </div>`;
+}
+
+function bindVis() {
+  const b = $('#toggle-vis');
+  if (!b) return;
+  b.onclick = async () => {
+    const key = TAB_SECTION[tab];
+    const sections = pub.sections.map((x) => (x.key === key ? { ...x, visible: !x.visible } : x));
+    try {
+      await adminApi('/api/admin/section/sections', { method: 'PUT', body: { sections } });
+      pub.sections = sections;
+      $('#vis-bar').outerHTML = visBar();
+      bindVis();
+      renderTabsBar();
+      toast(sections.find((x) => x.key === key).visible ? 'رجع القسم للصفحة ✅' : 'تم إخفاء القسم، ومحتواه محفوظ ✅');
+    } catch (err) { toast(err.message, true); }
+  };
+}
+
+// ---------- السحب والإفلات لتغيير الأماكن (والأسهم تشتغل بعد على الجوال) ----------
+
+function enableDrag(list, onReorder) {
+  let dragEl = null;
+  list.addEventListener('pointerdown', (e) => {
+    const h = e.target.closest('.drag');
+    if (h) h.closest('.item-editor').draggable = true;
+  });
+  list.addEventListener('dragstart', (e) => {
+    dragEl = e.target.closest('.item-editor');
+    if (!dragEl) return;
+    dragEl.classList.add('dragging');
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', '');
+  });
+  list.addEventListener('dragover', (e) => {
+    if (!dragEl) return;
+    e.preventDefault();
+    const over = e.target.closest('.item-editor');
+    if (!over || over === dragEl || over.parentNode !== list) return;
+    const r = over.getBoundingClientRect();
+    list.insertBefore(dragEl, e.clientY > r.top + r.height / 2 ? over.nextSibling : over);
+  });
+  list.addEventListener('dragend', () => {
+    if (!dragEl) return;
+    dragEl.classList.remove('dragging');
+    dragEl.draggable = false;
+    dragEl = null;
+    onReorder();
+  });
+}
+
 function renderTabsBar() {
   $('#tabs').innerHTML = Object.entries(TABS).map(([k, v]) => {
     const badge = k === 'box' ? priv.suggestions.filter((s) => !s.done).length
       : k === 'lens' ? priv.photos.filter((p) => !p.approved).length : 0;
-    return `<button class="${k === tab ? 'on' : ''}" data-tab="${k}">${v}${badge ? ` (${badge})` : ''}</button>`;
+    const sec = pub.sections.find((x) => x.key === TAB_SECTION[k]);
+    const off = sec && !sec.visible;
+    return `<button class="${k === tab ? 'on' : ''} ${off ? 'off' : ''}" data-tab="${k}" ${off ? 'title="القسم مخفي عن الموظفين"' : ''}>${v}${badge ? ` (${badge})` : ''}</button>`;
   }).join('');
 }
 
@@ -296,9 +380,11 @@ function renderTab() {
   renderTabsBar();
   store.set('wk-admin-tab', tab);
   const body = $('#tab-body');
-  if (LIST_SCHEMAS[tab]) { body.innerHTML = listEditor(tab); bindList(tab); return; }
-  body.innerHTML = views[tab]();
+  if (LIST_SCHEMAS[tab]) { body.innerHTML = visBar() + listEditor(tab); bindVis(); bindList(tab); return; }
+  body.innerHTML = visBar() + views[tab]();
+  bindVis();
   if (tab === 'sections') return bindSections();
+  if (tab === 'issue') bindLogo();
   if (tab === 'users') return bindUsers();
   if (tab === 'email') return bindEmail();
   const f = $('#f');
@@ -363,6 +449,19 @@ function collectSections() {
 
 function bindSections() {
   const f = $('#f-sections');
+  enableDrag($('.editor-list', f), () => {
+    pub.sections = collectSections();
+    renderTab();
+    $('#f-sections button.btn').textContent = '💾 حفظ العناوين والترتيب (الترتيب تغيّر)';
+  });
+  f.addEventListener('change', (e) => {
+    if (e.target.name !== 'visible') return;
+    const row = e.target.closest('.item-editor');
+    row.classList.toggle('hidden-sec', !e.target.checked);
+    const st = $('.state', row);
+    st.className = `state ${e.target.checked ? 'on' : 'off'}`;
+    st.textContent = e.target.checked ? 'ظاهر' : 'مخفي';
+  });
   f.addEventListener('click', (e) => {
     const mv = e.target.closest('[data-smove]');
     if (!mv) return;
@@ -389,6 +488,40 @@ function bindSections() {
       toast('تم حفظ إعدادات الطقس ✅');
       await load();
     } catch (err) { toast(err.message, true); }
+  };
+}
+
+// ---------- الشعار ----------
+
+function readLogo(file) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      const s = Math.min(1, 240 / img.height); // حجم مناسب للترويسة
+      const c = document.createElement('canvas');
+      c.width = Math.round(img.width * s); c.height = Math.round(img.height * s);
+      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+      URL.revokeObjectURL(url);
+      resolve(c.toDataURL('image/png'));
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('ما قدرنا نقرأ الصورة')); };
+    img.src = url;
+  });
+}
+
+function bindLogo() {
+  $('#logo-file').onchange = async (e) => {
+    if (!e.target.files[0]) return;
+    try {
+      await adminApi('/api/admin/logo', { method: 'POST', body: { image: await readLogo(e.target.files[0]) } });
+      toast('تم رفع الشعار ✅');
+      await load();
+    } catch (err) { toast(err.message, true); }
+  };
+  const del = $('#logo-del');
+  if (del) del.onclick = async () => {
+    try { await adminApi('/api/admin/logo', { method: 'POST', body: { image: '' } }); await load(); } catch (err) { toast(err.message, true); }
   };
 }
 
@@ -463,12 +596,14 @@ function bindUsers() {
 
 const E = {
   font: "font-family:Tahoma,Arial,sans-serif;",
-  h2: 'margin:0 0 4px;font-size:20px;color:#1f2a37;',
-  sub: 'margin:0 0 12px;font-size:13px;color:#6b7280;',
-  card: 'background:#ffffff;border:1px solid #ece4d6;border-radius:10px;padding:14px;margin:0 0 10px;',
+  h2: 'margin:0 0 4px;font-size:19px;color:#17303d;border-right:4px solid #1f8a87;padding-right:10px;',
+  sub: 'margin:0 0 12px;font-size:13px;color:#667784;',
+  card: 'background:#ffffff;border:1px solid #e1e6ea;border-right:4px solid #1f8a87;border-radius:8px;padding:14px;margin:0 0 10px;',
 };
-const ebtn = (href, text, color = '#0e7c86') =>
-  `<a href="${esc(href)}" style="display:inline-block;background:${color};color:#ffffff;text-decoration:none;font-weight:bold;padding:9px 18px;border-radius:8px;font-size:14px;">${esc(text)}</a>`;
+const ebtn = (href, text, color = '#114b5f') =>
+  `<a href="${esc(href)}" style="display:inline-block;background:${color};color:#ffffff;text-decoration:none;font-weight:bold;padding:9px 18px;border-radius:6px;font-size:14px;">${esc(text)}</a>`;
+const EMAIL_STRIPE = ['#e0823a', '#8a2c47', '#1f8a87', '#3e95cf', '#6f9a2c', '#154b63']
+  .map((c) => `<td height="5" style="background:${c};font-size:0;line-height:0;">&nbsp;</td>`).join('');
 
 function emailSection(s, weather) {
   const site = siteUrl();
@@ -481,9 +616,9 @@ function emailSection(s, weather) {
       break;
     case 'matches':
       if (pub.matches.length) body = `<table role="presentation" width="100%" cellpadding="8" cellspacing="0" style="border-collapse:collapse;font-size:14px;">${pub.matches.map((m) => `
-        <tr style="border-bottom:1px solid #ece4d6;"><td style="color:#0e7c86;font-weight:bold;">${esc(m.league)}</td>
-        <td style="font-weight:bold;">${esc(m.home)} × ${esc(m.away)}</td><td style="color:#6b7280;">${esc(m.day)} ${esc(m.time)}</td>
-        <td style="color:#6b7280;">${m.channel ? '📺 ' + esc(m.channel) : ''}</td></tr>`).join('')}</table>`;
+        <tr style="border-bottom:1px solid #e1e6ea;"><td style="color:#114b5f;font-weight:bold;">${esc(m.league)}</td>
+        <td style="font-weight:bold;">${esc(m.home)} × ${esc(m.away)}</td><td style="color:#667784;">${esc(m.day)} ${esc(m.time)}</td>
+        <td style="color:#667784;">${m.channel ? '📺 ' + esc(m.channel) : ''}</td></tr>`).join('')}</table>`;
       break;
     case 'poll':
       if (pub.poll.home) body = `<div style="${E.card}"><p style="margin:0 0 10px;font-size:16px;font-weight:bold;">${esc(pub.poll.question)}</p>${ebtn(site + '/#poll', '🔮 صوّت الحين')}</div>`;
@@ -492,10 +627,10 @@ function emailSection(s, weather) {
       body = pub.recommendations.map((r) => {
         const [ic, cat] = label('rec', r.category);
         const link = safeUrl(r.link);
-        return `<div style="${E.card}"><p style="margin:0;font-size:13px;color:#6b7280;">${ic} ${esc(cat)}</p>
-          <p style="margin:2px 0;font-weight:bold;">${esc(r.title || cat)} ${r.category === 'book' ? 'ينصح فيه' : 'برأي'} زميلنا <span style="color:#f2994a;">${esc(r.colleague)}</span></p>
-          <p style="margin:2px 0;font-size:16px;color:#0e7c86;font-weight:bold;">${esc(r.itemName)}</p>
-          <p style="margin:2px 0 8px;">${esc(r.description)}${r.location ? `<br><span style="color:#6b7280;font-size:13px;">📍 ${esc(r.location)}</span>` : ''}</p>
+        return `<div style="${E.card}"><p style="margin:0;font-size:13px;color:#667784;">${ic} ${esc(cat)}</p>
+          <p style="margin:2px 0;font-weight:bold;">${esc(r.title || cat)} ${r.category === 'book' ? 'ينصح فيه' : 'برأي'} زميلنا <span style="color:#e0823a;">${esc(r.colleague)}</span></p>
+          <p style="margin:2px 0;font-size:16px;color:#114b5f;font-weight:bold;">${esc(r.itemName)}</p>
+          <p style="margin:2px 0 8px;">${esc(r.description)}${r.location ? `<br><span style="color:#667784;font-size:13px;">📍 ${esc(r.location)}</span>` : ''}</p>
           ${link ? ebtn(link, r.category === 'book' ? '📥 تحميل الكتاب' : '🔗 الرابط') : ''}</div>`;
       }).join('');
       break;
@@ -503,26 +638,26 @@ function emailSection(s, weather) {
       const f = pub.photos.find((p) => p.id === pub.featuredPhotoId);
       body = f ? `<img src="${esc(site + f.url)}" width="600" alt="${esc(f.caption || 'صورة العدد')}" style="display:block;width:100%;max-width:600px;height:auto;border-radius:10px;">
         <p style="margin:6px 0 10px;">🏆 <b>بعدسة ${esc(f.name)}</b>${f.caption ? ' — ' + esc(f.caption) : ''}</p>` : '';
-      body += ebtn(site + '/#lens', '📤 أرسل صورتك للعدد الجاي', '#f2994a');
+      body += ebtn(site + '/#lens', '📤 أرسل صورتك للعدد الجاي', '#e0823a');
       break;
     }
     case 'creative':
       body = pub.creative.map((c) => { const [ic, t] = label('creative', c.type); const link = safeUrl(c.link); return `<div style="${E.card}">
-        <p style="margin:0;font-size:13px;color:#6b7280;">${ic} ${esc(t)} · بقلم وصوت زميلنا <b>${esc(c.author)}</b></p>
+        <p style="margin:0;font-size:13px;color:#667784;">${ic} ${esc(t)} · بقلم وصوت زميلنا <b>${esc(c.author)}</b></p>
         <p style="margin:2px 0 6px;font-size:16px;font-weight:bold;">${esc(c.title)}</p>
         ${c.body ? `<p style="margin:0 0 8px;white-space:pre-line;${c.type === 'poem' ? 'text-align:center;line-height:2;' : ''}">${esc(trunc(c.body, 500))}</p>` : ''}
         ${ebtn(link || site + '/#creative', c.type === 'podcast' ? '🎧 استمع' : '📖 اقرأ في المنصة')}</div>`; }).join('');
       break;
     case 'selfdev':
       body = pub.selfdev.map((x) => { const link = safeUrl(x.link); return `<div style="${E.card}"><p style="margin:0 0 4px;font-weight:bold;font-size:16px;">🌱 ${esc(x.title)}</p>
-        <p style="margin:0 0 6px;">${esc(x.summary)}</p>${link ? `<a href="${esc(link)}" style="color:#0e7c86;">كمّل القراءة ←</a>` : ''}</div>`; }).join('');
+        <p style="margin:0 0 6px;">${esc(x.summary)}</p>${link ? `<a href="${esc(link)}" style="color:#114b5f;">كمّل القراءة ←</a>` : ''}</div>`; }).join('');
       break;
     case 'quiz': {
       const q = pub.quiz;
-      if (q.question) body = `<div style="${E.card}border:2px dashed #f2994a;"><p style="margin:0;color:#f2994a;font-weight:bold;">سؤال الأسبوع</p>
+      if (q.question) body = `<div style="${E.card}border:2px dashed #e0823a;"><p style="margin:0;color:#e0823a;font-weight:bold;">سؤال الأسبوع</p>
         <p style="margin:4px 0 6px;font-size:16px;font-weight:bold;">${esc(q.question)}</p>
         ${q.prize ? `<p style="margin:0 0 10px;">🎁 الجائزة: <b>${esc(q.prize)}</b></p>` : ''}
-        ${q.winner ? `<p style="margin:0;background:#fdf3dc;padding:10px;border-radius:8px;">🎉 مبروك للفائز <b>${esc(q.winner.name)}</b>!</p>` : ebtn(site + '/#quiz', '🧩 جاوب الحين', '#f2994a')}</div>`;
+        ${q.winner ? `<p style="margin:0;background:#fdf3dc;padding:10px;border-radius:8px;">🎉 مبروك للفائز <b>${esc(q.winner.name)}</b>!</p>` : ebtn(site + '/#quiz', '🧩 جاوب الحين', '#e0823a')}</div>`;
       break;
     }
     case 'box':
@@ -544,18 +679,21 @@ function buildEmail(weather) {
     wline = `<p style="margin:12px 0 0;font-size:14px;">${ic} ${esc(weather.city)}: <b>${weather.current.temp}°</b> ${txt}${wk ? ` · ${wk}` : ''}</p>`;
   }
   const sections = pub.sections.filter((s) => s.visible).map((s) => emailSection(s, weather)).join('');
-  return `<div dir="rtl" style="${E.font}background:#fbf7f0;padding:16px 0;">
-<table role="presentation" align="center" width="640" cellpadding="0" cellspacing="0" style="width:100%;max-width:640px;margin:0 auto;background:#fbf7f0;${E.font}color:#1f2a37;direction:rtl;text-align:right;">
-<tr><td style="background:#0e7c86;color:#ffffff;padding:26px 22px;border-radius:14px;">
-  <p style="margin:0;font-size:13px;">العدد ${esc(i.number)}${dates ? ' · ' + esc(dates) : ''}</p>
-  <h1 style="margin:6px 0;font-size:34px;color:#ffffff;">${esc(i.title || 'ويكند سعيد')} ☀️</h1>
+  return `<div dir="rtl" style="${E.font}background:#f2f4f6;padding:16px 0;">
+<table role="presentation" align="center" width="640" cellpadding="0" cellspacing="0" style="width:100%;max-width:640px;margin:0 auto;background:#f2f4f6;${E.font}color:#17303d;direction:rtl;text-align:right;">
+<tr><td><table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>${EMAIL_STRIPE}</tr></table></td></tr>
+<tr><td style="background:#114b5f;color:#ffffff;padding:22px;">
+  ${i.logo ? `<img src="${esc(siteUrl() + i.logo)}" height="44" alt="" style="height:44px;width:auto;margin:0 0 6px;">` : ''}
+  ${i.orgName ? `<p style="margin:0;font-size:14px;font-weight:bold;">${esc(i.orgName)}</p>` : ''}
+  <p style="margin:14px 0 0;font-size:13px;color:#8fd0ea;">نشرة أسبوعية · العدد ${esc(arNum(i.number))}${dates ? ' · ' + esc(dates) : ''}</p>
+  <h1 style="margin:4px 0 6px;font-size:30px;color:#ffffff;">${esc(i.title || 'ويكند سعيد')} ☀️</h1>
   <p style="margin:0;font-size:16px;">${esc(i.greeting)}</p>${wline}
-  <p style="margin:16px 0 0;">${ebtn(siteUrl(), 'افتح المنصة وتفاعل معنا', '#f2994a')}</p>
+  <p style="margin:16px 0 0;">${ebtn(siteUrl(), 'افتح المنصة وتفاعل معنا', '#e0823a')}</p>
 </td></tr>
 ${sections}
 <tr><td style="padding:22px;text-align:center;">
-  ${i.quote ? `<p style="margin:0 0 6px;font-size:17px;font-weight:bold;color:#0e7c86;">“${esc(i.quote)}”</p>` : ''}
-  <p style="margin:0;color:#6b7280;font-size:13px;">${esc(i.footer)}</p>
+  ${i.quote ? `<p style="margin:0 0 6px;font-size:17px;font-weight:bold;color:#114b5f;">“${esc(i.quote)}”</p>` : ''}
+  <p style="margin:0;color:#667784;font-size:13px;">${esc(i.footer)}</p>
 </td></tr>
 </table></div>`;
 }

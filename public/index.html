@@ -5,34 +5,50 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>ويكند سعيد</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800&display=swap">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&display=swap">
   <link rel="stylesheet" href="/styles.css">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>☀️</text></svg>">
 </head>
 <body class="loading">
+  <div class="stripe" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i></div>
   <header class="hero">
-    <div class="topbar">
-      <div class="wrap topbar-in">
-        <div class="weather" id="weather" hidden></div>
+    <div class="wrap">
+      <div class="hero-bar">
+        <div class="brand">
+          <img id="org-logo" alt="" hidden>
+          <div><b id="org-name"></b><span id="org-name-en"></span></div>
+        </div>
         <div class="userbar">
           <span id="hello"></span>
-          <a href="/admin" id="admin-link" hidden>🛠️ لوحة الإدارة</a>
-          <button type="button" class="link-btn" id="pw-open">🔑 كلمة المرور</button>
+          <a href="/admin" id="admin-link" hidden>لوحة الإدارة</a>
+          <button type="button" class="link-btn" id="pw-open">كلمة المرور</button>
           <button type="button" class="link-btn" onclick="logout()">خروج</button>
         </div>
       </div>
-    </div>
-    <div class="wrap">
-      <div class="hero-top">
-        <span class="badge" id="issue-badge">العدد</span>
-        <span class="badge soft" id="issue-dates"></span>
+      <div class="hero-main">
+        <div class="hero-text">
+          <p class="eyebrow">نشرة أسبوعية للموظفين<span id="issue-dates"></span></p>
+          <h1 id="issue-title">ويكند سعيد</h1>
+          <p class="greeting" id="issue-greeting"></p>
+        </div>
+        <dl class="info-box">
+          <div><dt>العدد</dt><dd id="issue-no">—</dd></div>
+          <div><dt id="today-name">اليوم</dt><dd id="today"></dd><span id="today-hijri"></span></div>
+          <div><dt>الوقت</dt><dd id="clock"></dd></div>
+        </dl>
       </div>
-      <h1 id="issue-title">ويكند سعيد</h1>
-      <p class="greeting" id="issue-greeting"></p>
-      <div class="countdown" id="countdown"></div>
-      <nav class="chips" id="nav"></nav>
     </div>
   </header>
+
+  <div class="wrap">
+    <div class="stats" id="stats">
+      <div class="stat c1" id="weather" hidden></div>
+      <div class="stat c2 w-day" id="w-fri" hidden></div>
+      <div class="stat c3 w-day" id="w-sat" hidden></div>
+      <div class="stat c4" id="countdown"></div>
+    </div>
+    <nav class="chips" id="nav"></nav>
+  </div>
 
   <main class="wrap">
     <section id="occasions" class="occasions">

@@ -4,26 +4,31 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>إدارة ويكند سعيد</title>
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800&display=swap">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&display=swap">
   <link rel="stylesheet" href="/styles.css">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🛠️</text></svg>">
 </head>
 <body>
+  <div class="stripe" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i></div>
   <div class="wrap">
     <div id="denied" class="card login" hidden>
       <h2>🔒 لوحة فريق النشرة</h2>
       <p id="denied-msg"></p>
       <div class="actions"><a class="btn" href="/">الرجوع للنشرة</a><button class="btn ghost" onclick="logout()">دخول بحساب ثاني</button></div>
     </div>
+  </div>
 
-    <div id="panel" hidden>
-      <div class="admin-bar">
+  <div id="panel" hidden>
+    <div class="admin-head">
+      <div class="wrap admin-bar">
         <h2>🛠️ إدارة ويكند سعيد</h2>
         <div class="actions">
-          <a class="btn ghost sm" href="/" target="_blank">👀 عرض الصفحة</a>
+          <a class="btn ghost sm" href="/">👀 عرض الصفحة</a>
           <button class="btn ghost sm" onclick="logout()">خروج</button>
         </div>
       </div>
+    </div>
+    <div class="wrap">
       <nav class="tabs" id="tabs"></nav>
       <div class="card" id="tab-body"></div>
     </div>

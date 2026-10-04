@@ -47,6 +47,9 @@ function timeAgo(iso) {
   return `قبل ${Math.floor(s / 86400)} يوم`;
 }
 
+// أرقام عربية (٠١٢٣) مثل هوية الجهة
+const arNum = (n) => String(n).replace(/\d/g, (x) => '٠١٢٣٤٥٦٧٨٩'[x]);
+
 function fmtDate(d) {
   if (!d) return '';
   try { return new Date(d + 'T00:00:00').toLocaleDateString('ar-SA-u-ca-gregory', { day: 'numeric', month: 'long' }); } catch { return d; }
