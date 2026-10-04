@@ -90,7 +90,14 @@
     try { db = JSON.parse(e.newValue) || db; } catch { /* تجاهل */ }
     broadcast();
   });
-  window.EventSource = class { constructor() { listeners.add(this); } close() { listeners.delete(this); } };
+  // في وضع الخادم نستخدم التحديث الحي الحقيقي، وفي الوضع المحلي نحاكيه بين تبويبات المتصفح
+  const RealEventSource = window.EventSource;
+  window.EventSource = function (url, opts) {
+    if (MODE === 'server') return new RealEventSource(url, opts);
+    const es = { onmessage: null, close() { listeners.delete(es); } };
+    listeners.add(es);
+    return es;
+  };
 
   // ---------- أدوات ----------
   function err(status, message) { return Object.assign(new Error(message), { status }); }
@@ -341,12 +348,33 @@
     throw err(404, 'غير موجود');
   }
 
-  // نعترض طلبات /api/ ونجاوبها من هنا، وباقي الطلبات (مثل الطقس) تروح للإنترنت عادي
+  // ---------- وضع التشغيل ----------
+  // إذا الملف مفتوح من خادم المنصة (server.js) نستخدم بياناته المشتركة،
+  // وإذا مفتوح كملف من الجهاز أو من استضافة عادية نشتغل محلياً في المتصفح.
+  let MODE = null;
+  let modeCheck = null;
+  function detectMode() {
+    if (!modeCheck) {
+      modeCheck = (async () => {
+        if (location.protocol === 'http:' || location.protocol === 'https:') {
+          try {
+            const r = await realFetch('/api/brand', { cache: 'no-store' });
+            if (r.ok && r.headers.get('X-Weekend-Saeed')) return 'server';
+          } catch { /* ما فيه خادم */ }
+        }
+        return 'local';
+      })().then((m) => { MODE = m; document.documentElement.dataset.mode = m; return m; });
+    }
+    return modeCheck;
+  }
+
+  // نعترض طلبات /api/ ونجاوبها من هنا (أو نمررها للخادم)، وباقي الطلبات مثل الطقس تروح للإنترنت عادي
   const realFetch = window.fetch.bind(window);
   window.fetch = async (input, init = {}) => {
     const url = new URL(typeof input === 'string' ? input : input.url, location.href);
     const i = url.pathname.indexOf('/api/');
     if (i < 0 || url.origin !== location.origin) return realFetch(input, init);
+    if ((await detectMode()) === 'server') return realFetch(input, init);
     let status = 200; let data;
     try { data = await route((init.method || 'GET').toUpperCase(), url.pathname.slice(i), init.body ? JSON.parse(init.body) : {}); }
     catch (e) { status = e.status || 500; data = { error: e.status ? e.message : 'صار خطأ، جرّب مرة ثانية' }; if (!e.status) console.error(e); }

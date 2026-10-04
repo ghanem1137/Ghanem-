@@ -246,7 +246,8 @@ async function geocode(city) {
 // ---------- أدوات ----------
 
 function send(res, status, data) {
-  res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
+  // الترويسة X-Weekend-Saeed تخلي نسخة الملف الواحد تعرف إنها مفتوحة من خادم المنصة
+  res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', 'X-Weekend-Saeed': '1' });
   res.end(JSON.stringify(data));
 }
 
@@ -655,6 +656,8 @@ function serveStatic(req, res, url) {
   }
   const pages = { '/': '/index.html', '/admin': '/admin.html', '/login': '/login.html' };
   rel = pages[rel] || rel;
+  // نسخة الملف الواحد (dist/weekend-saeed.html) تنخدم بعد من نفس الخادم
+  if (rel === '/weekend-saeed.html' && root === PUBLIC_DIR) root = path.join(__dirname, 'dist');
   const file = path.normalize(path.join(root, rel));
   if (!file.startsWith(root + path.sep)) { res.writeHead(403); return res.end(); }
   fs.readFile(file, (err, data) => {

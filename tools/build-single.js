@@ -41,7 +41,7 @@ const admin = links(bodyOf(read('admin.html')));
 const login = links(bodyOf(read('login.html')));
 
 const homeTpl = swap(home, '<p class="muted" id="issue-footer"></p>',
-  '<p class="muted" id="issue-footer"></p>\n      <p class="muted small">نسخة الملف الواحد: البيانات محفوظة في متصفح هذا الجهاز فقط.</p>');
+  '<p class="muted" id="issue-footer"></p>\n      <p class="muted small local-only">نسخة الملف الواحد: البيانات محفوظة في متصفح هذا الجهاز فقط.</p>');
 
 // ---------- السكربتات ----------
 let common = read('common.js');
@@ -84,7 +84,7 @@ document.getElementById('app').replaceChildren(document.getElementById('tpl-' + 
 function backupTools() {
   const KEY = 'weekend-saeed-data-v1';
   const box = document.createElement('div');
-  box.className = 'wrap';
+  box.className = 'wrap local-only';
   box.innerHTML = '<div class="card" style="margin:18px 0"><h3>💾 النسخ الاحتياطي</h3>' +
     '<p class="muted small">البيانات في نسخة الملف الواحد محفوظة في هذا المتصفح فقط. نزّل نسخة احتياطية بشكل دوري، وتقدر ترجعها هنا أو على جهاز ثاني.</p>' +
     '<div class="actions"><button type="button" class="btn sm" id="bk-save">⬇️ تنزيل نسخة احتياطية</button>' +
@@ -114,7 +114,8 @@ const html = `<!doctype html>
 <!--
   ويكند سعيد — نسخة الملف الواحد (HTML5)
   يتولّد تلقائياً من مجلد public بالأمر: npm run build:single — لا تعدّله يدوياً.
-  افتحه بدبل كلك. البيانات تنحفظ في متصفح الجهاز اللي يفتحه فقط.
+  - مفتوح من خادم المنصة (server.js) على /weekend-saeed.html: بيانات مشتركة وتحديث مباشر لكل الموظفين.
+  - مفتوح بدبل كلك من الجهاز: يشتغل محلياً والبيانات في متصفح هذا الجهاز فقط.
   دخول الإدارة أول مرة: admin / weekend123 (غيّرها من زر كلمة المرور)
 -->
 <html lang="ar" dir="rtl">
@@ -127,6 +128,8 @@ const html = `<!doctype html>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>☀️</text></svg>">
 <style>
 ${read('styles.css')}
+/* لما يكون الملف مفتوح من خادم المنصة، البيانات مشتركة فما نحتاج تنبيهات الوضع المحلي */
+[data-mode="server"] .local-only { display: none !important; }
 </style>
 </head>
 <body>
