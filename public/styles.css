@@ -71,7 +71,9 @@ p { margin: .3em 0; }
 .hero { background: var(--head); color: var(--head-ink); padding-block: 18px 30px; }
 .hero-bar { display: flex; justify-content: space-between; align-items: center; gap: 12px 24px; flex-wrap: wrap; }
 .brand { display: flex; align-items: center; gap: 12px; }
-.brand img { height: 46px; width: auto; }
+.logo-plate { background: #fff; border-radius: 8px; padding: 4px 10px; display: inline-flex; }
+.logo-plate img { height: 78px; width: auto; }
+@media (max-width: 560px) { .logo-plate img { height: 60px; } }
 .brand b { display: block; font-size: 1rem; font-weight: 700; }
 .brand span { display: block; font-size: .68rem; letter-spacing: .06em; opacity: .85; direction: ltr; text-align: right; }
 .userbar { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; font-size: .9rem; }
@@ -131,12 +133,36 @@ main section[data-acc="5"] { --acc: var(--c-maroon); }
 
 .card { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 18px; box-shadow: var(--shadow); }
 .match, .rec, .creative-item, .selfdev, .poll, .quiz, .occasion, .featured, .shot { border-inline-start: 4px solid var(--acc); }
-.grid { display: grid; gap: 14px; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); }
-.grid.recs { grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); }
+.grid { display: grid; gap: 14px; grid-template-columns: repeat(12, minmax(0, 1fr)); }
 .grid > *, .stack > * { min-width: 0; }
+
+/* ---------- أحجام المشاركات ----------
+   حجم القسم (data-size) هو الافتراضي، وحجم المشاركة نفسها (sz-*) يغلبه:
+   صغير = ٤ في الصف، متوسط = ٣، كبير = ٢، عرض كامل = ١ */
+.grid > * { grid-column: span 4; }
+section[data-size="sm"] .grid > * { grid-column: span 3; }
+section[data-size="md"] .grid > * { grid-column: span 4; }
+section[data-size="lg"] .grid > * { grid-column: span 6; }
+section[data-size="full"] .grid > * { grid-column: span 12; }
+.grid > .card.sz-sm { grid-column: span 3; }
+.grid > .card.sz-md { grid-column: span 4; }
+.grid > .card.sz-lg { grid-column: span 6; }
+.grid > .card.sz-full { grid-column: span 12; }
+.grid > .card.empty, .grid > .empty { grid-column: 1 / -1; }
+/* الأقسام اللي فيها بطاقة وحدة (الاستطلاع والمسابقة والصندوق): الحجم يتحكم بعرضها */
+section[data-size="sm"] .single { max-width: 420px; }
+section[data-size="md"] .single { max-width: 620px; }
+section[data-size="lg"] .single { max-width: 860px; }
+@media (max-width: 900px) {
+  main section[data-size] .grid > *, .grid > .card[class*="sz-"] { grid-column: span 6; }
+  main section[data-size="full"] .grid > *, .grid > .card.sz-lg, .grid > .card.sz-full { grid-column: span 12; }
+}
+@media (max-width: 560px) {
+  main section[data-size] .grid > *, .grid > .card[class*="sz-"] { grid-column: span 12; }
+  main section[data-size] .single { max-width: none; }
+}
 .stack { display: grid; gap: 14px; }
 .empty { text-align: center; color: var(--muted); padding: 34px 16px; margin: 0; }
-.grid > .empty { grid-column: 1 / -1; }
 
 .tag { display: inline-block; font-size: .75rem; font-weight: 600; background: var(--sea-soft); color: var(--acc, var(--sea)); padding: 0 10px; border-radius: 4px; }
 .tag.gold { background: var(--sun-soft); color: var(--gold); }
@@ -192,7 +218,8 @@ main section[data-acc="5"] { --acc: var(--c-maroon); }
 .featured figcaption, .featured .interact { padding: 12px 18px; }
 .featured .interact { padding-top: 0; }
 figure { margin: 0; }
-.gallery { display: grid; gap: 14px; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); margin: 14px 0; }
+.gallery { margin: 14px 0; }
+.gallery:empty { display: none; }
 .shot { padding: 0; overflow: hidden; }
 .shot img { aspect-ratio: 4 / 3; object-fit: cover; width: 100%; }
 .shot figcaption, .shot .interact { padding: 8px 12px; font-size: .88rem; }
@@ -276,7 +303,7 @@ body.loading main, body.loading .chips, body.loading .stats { visibility: hidden
 .login-page main { flex: 1; display: grid; place-items: center; padding: 24px 16px; }
 .login-page .login { margin: 0; width: 100%; max-width: 400px; }
 .login-head { text-align: center; display: grid; gap: 4px; justify-items: center; }
-.login-head img { height: 56px; width: auto; }
+.login-head img { height: 96px; width: auto; }
 .login-head .org { font-size: .85rem; color: var(--muted); }
 .login-head h1 { font-size: 1.8rem; font-weight: 700; }
 .login { max-width: 380px; margin: 80px auto; }
@@ -318,7 +345,9 @@ dialog::backdrop { background: rgba(0, 0, 0, .4); }
 .sec-row { display: grid; grid-template-columns: 70px 1fr 1fr 1.6fr; gap: 8px; align-items: end; }
 @media (max-width: 760px) { .sec-row { grid-template-columns: 1fr 1fr; } }
 .logo-row { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
-.logo-row img { height: 56px; width: auto; background: var(--head); padding: 6px; border-radius: 6px; }
+.logo-row img { height: 56px; width: auto; background: #fff; border: 1px solid var(--line); padding: 6px; border-radius: 6px; }
+.size-pick { display: flex; align-items: center; gap: 8px; font-size: .9rem; }
+.size-pick select { width: auto; padding: 4px 10px; }
 .cred { font-family: Consolas, Menlo, monospace; direction: ltr; unicode-bidi: isolate; }
 .notice { background: var(--sea-soft); border-radius: 8px; padding: 10px 14px; }
 .email-preview { border: 1px solid var(--line); border-radius: 8px; background: #fff; max-height: 600px; overflow: auto; }

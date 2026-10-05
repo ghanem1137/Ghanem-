@@ -7,6 +7,10 @@ const drafts = {};
 const $ = (s, el = document) => el.querySelector(s);
 
 
+// حجم المشاركة: من إعداد المشاركة نفسها، وإذا فاضي ياخذ حجم القسم
+const SIZES = ['sm', 'md', 'lg', 'full'];
+const sz = (it) => (SIZES.includes(it.size) ? `sz-${it.size}` : '');
+
 // ---------- التفاعل: إعجاب + تعليقات ----------
 
 function interact(targetId) {
@@ -92,6 +96,7 @@ function renderSections() {
     if (!el) continue;
     main.appendChild(el);
     el.dataset.acc = String(state.sections.indexOf(s) % 6);
+    el.dataset.size = SIZES.includes(s.size) ? s.size : 'md';
     const empty = s.key === 'occasions' && !state.occasions.length;
     el.hidden = !s.visible || empty;
     $('.sec-head h2', el).textContent = [s.emoji, s.title].filter(Boolean).join(' ');
@@ -111,7 +116,7 @@ function renderOccasions() {
 
 function renderMatches() {
   $('#matches-list').innerHTML = state.matches.map((m) => `
-    <article class="card match">
+    <article class="card match ${sz(m)}">
       <div class="match-top"><span class="league">${esc(m.league)}</span><span class="day">${esc(m.day)} · ${esc(m.time)}</span></div>
       <div class="teams"><span>${esc(m.home)}</span><span class="vs">VS</span><span>${esc(m.away)}</span></div>
       <div class="match-meta">${m.stadium ? `🏟️ ${esc(m.stadium)}` : ''} ${m.channel ? `<span>📺 ${esc(m.channel)}</span>` : ''}</div>
@@ -158,7 +163,7 @@ function renderRecs() {
     const link = safeUrl(r.link);
     const isBook = r.category === 'book';
     return `
-    <article class="card rec cat-${esc(r.category)}">
+    <article class="card rec cat-${esc(r.category)} ${sz(r)}">
       <div class="rec-head"><span class="rec-ic">${ic}</span><div>
         <span class="tag">${esc(cat)}</span>
         <h3>${esc(r.title || cat)} ${isBook ? 'ينصح فيه' : 'برأي'} زميلنا <span class="who">${esc(r.colleague)}</span></h3>
@@ -198,7 +203,7 @@ function renderCreative() {
     const link = safeUrl(c.link);
     const long = c.body.length > 280;
     return `
-    <article class="card creative-item type-${esc(c.type)}">
+    <article class="card creative-item type-${esc(c.type)} ${sz(c)}">
       <div class="rec-head"><span class="rec-ic">${ic}</span><div>
         <span class="tag">${esc(t)}</span>
         <h3>${esc(c.title)}</h3>
@@ -216,7 +221,7 @@ function renderSelfdev() {
   $('#selfdev-list').innerHTML = state.selfdev.map((s) => {
     const link = safeUrl(s.link);
     return `
-    <article class="card selfdev">
+    <article class="card selfdev ${sz(s)}">
       <h3>🌱 ${esc(s.title)}</h3>
       <p>${esc(s.summary)}</p>
       <p class="muted small">${s.source ? `✍️ ${esc(s.source)}` : ''} ${s.readMinutes ? ` · ⏱️ ${esc(s.readMinutes)} دقائق قراءة` : ''}</p>
@@ -352,8 +357,11 @@ function renderCountdown() {
 function renderBrand(i) {
   $('#org-name').textContent = i.orgName || '';
   $('#org-name-en').textContent = i.orgNameEn || '';
+  // الشعار فيه اسم الجهة، فإذا موجود نخفي الاسم المكتوب عشان ما يتكرر
   const logo = $('#org-logo');
-  logo.hidden = !i.logo;
+  $('#logo-plate').hidden = !i.logo;
+  $('#org-text').hidden = !!i.logo;
+  logo.alt = i.orgName || '';
   if (i.logo && logo.getAttribute('src') !== i.logo) logo.src = i.logo;
 }
 

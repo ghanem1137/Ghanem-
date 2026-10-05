@@ -15,8 +15,8 @@
     <div class="wrap">
       <div class="hero-bar">
         <div class="brand">
-          <img id="org-logo" alt="" hidden>
-          <div><b id="org-name"></b><span id="org-name-en"></span></div>
+          <span class="logo-plate" id="logo-plate" hidden><img id="org-logo" alt=""></span>
+          <div id="org-text"><b id="org-name"></b><span id="org-name-en"></span></div>
         </div>
         <div class="userbar">
           <span id="hello"></span>
@@ -63,7 +63,7 @@
 
     <section id="poll">
       <div class="sec-head"><h2></h2><p></p></div>
-      <div class="card poll" id="poll-box"></div>
+      <div class="card poll single" id="poll-box"></div>
     </section>
 
     <section id="recs">
@@ -74,7 +74,7 @@
     <section id="lens">
       <div class="sec-head"><h2></h2><p></p></div>
       <div id="lens-featured"></div>
-      <div class="gallery" id="lens-gallery"></div>
+      <div class="grid gallery" id="lens-gallery"></div>
       <details class="card form-card">
         <summary>📤 أرسل صورتك للعدد الجاي</summary>
         <form id="photo-form" class="form">
@@ -88,7 +88,7 @@
 
     <section id="creative">
       <div class="sec-head"><h2></h2><p></p></div>
-      <div class="stack" id="creative-list"></div>
+      <div class="grid" id="creative-list"></div>
     </section>
 
     <section id="selfdev">
@@ -98,12 +98,12 @@
 
     <section id="quiz">
       <div class="sec-head"><h2></h2><p></p></div>
-      <div class="card quiz" id="quiz-box"><div id="quiz-main"></div><div id="quiz-interact"></div></div>
+      <div class="card quiz single" id="quiz-box"><div id="quiz-main"></div><div id="quiz-interact"></div></div>
     </section>
 
     <section id="box">
       <div class="sec-head"><h2></h2><p></p></div>
-      <form id="suggest-form" class="card form">
+      <form id="suggest-form" class="card form single">
         <div class="row">
           <label>نوع المشاركة
             <select name="type">

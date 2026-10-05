@@ -35,7 +35,7 @@
       document.getElementById('org-name').textContent = b.orgName || '';
       document.getElementById('site-title').textContent = `${b.title || 'ويكند سعيد'} ☀️`;
       const img = document.getElementById('org-logo');
-      if (b.logo) { img.src = b.logo; img.hidden = false; }
+      if (b.logo) { img.src = b.logo; img.alt = b.orgName || ''; img.hidden = false; document.getElementById('org-name').hidden = true; }
     }).catch(() => {});
     f.addEventListener('submit', async (e) => {
       e.preventDefault();

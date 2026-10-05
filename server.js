@@ -25,6 +25,10 @@ const str = (v, max = 500) => String(v ?? '').trim().slice(0, max);
 
 // ---------- البيانات ----------
 
+// أحجام المشاركات: صغير (٤ في الصف)، متوسط (٣)، كبير (٢)، عرض كامل
+const SIZES = ['sm', 'md', 'lg', 'full'];
+const DEFAULT_SIZES = { occasions: 'md', matches: 'sm', poll: 'full', recs: 'md', lens: 'sm', creative: 'full', selfdev: 'md', quiz: 'full', box: 'full' };
+
 // ترتيب الأقسام وعناوينها الافتراضية (الإدارة تقدر تعدّلها كلها)
 const DEFAULT_SECTIONS = [
   ['occasions', '🎉', 'مناسبات الزملاء', 'نفرح لفرحهم ونرحّب بالجدد', 'المناسبات'],
@@ -36,7 +40,7 @@ const DEFAULT_SECTIONS = [
   ['selfdev', '🌱', 'طوّر نفسك على رواق', 'قراءات قصيرة تنفعك بدون ما تثقل عليك', 'طوّر نفسك'],
   ['quiz', '🧩', 'مسابقة الويكند السريعة', 'سؤال خفيف، وجاوب صح وادخل السحب', 'المسابقة'],
   ['box', '📮', 'صندوق المشاركات والاقتراحات', 'عندك توصية، مقالة، قصيدة، فكرة للعدد الجاي، أو ملاحظة؟ هذا مكانها', 'شاركنا'],
-].map(([key, emoji, title, subtitle, nav]) => ({ key, emoji, title, subtitle, nav, visible: true }));
+].map(([key, emoji, title, subtitle, nav]) => ({ key, emoji, title, subtitle, nav, visible: true, size: DEFAULT_SIZES[key] }));
 const SECTION_KEYS = DEFAULT_SECTIONS.map((s) => s.key);
 
 function seed() {
@@ -51,7 +55,7 @@ function seed() {
       siteUrl: '',
       orgName: 'المكتب الاستراتيجي لتطوير منطقة جازان',
       orgNameEn: 'JAZAN REGION DEVELOPMENT STRATEGIC OFFICE',
-      logo: '',
+      logo: '/logo.png',
     },
     sections: DEFAULT_SECTIONS,
     weather: { enabled: true, city: 'جازان', lat: 16.8892, lon: 42.5511 },
@@ -84,6 +88,8 @@ try {
   for (const k of Object.keys(fresh)) if (db[k] === undefined) db[k] = fresh[k];
   for (const k of Object.keys(fresh.issue)) if (db.issue[k] === undefined) db.issue[k] = fresh.issue[k];
   db.sections = normalizeSections(db.sections);
+  // النسخ السابقة ما كان فيها شعار: نستخدم شعار الجهة الأساسي إلا إذا المدير حذفه بنفسه
+  if (!db.issue.logo && !db.issue.logoRemoved) db.issue.logo = '/logo.png';
 }
 
 let saveTimer = null;
@@ -285,6 +291,7 @@ function normalizeSections(list) {
     out.push({
       key: s.key, emoji: str(s.emoji, 8), title: str(s.title, 120) || d.title,
       subtitle: str(s.subtitle, 300), nav: str(s.nav, 40) || d.nav, visible: s.visible !== false,
+      size: SIZES.includes(s.size) ? s.size : d.size,
     });
   }
   for (const d of DEFAULT_SECTIONS) if (!out.some((x) => x.key === d.key)) out.push({ ...d });
@@ -340,16 +347,17 @@ function deleteImage(url) {
 // ---------- الأقسام القابلة للتعديل من الإدارة ----------
 
 const LIST_SECTIONS = {
-  matches: ['league', 'home', 'away', 'day', 'time', 'channel', 'stadium'],
-  recommendations: ['category', 'title', 'colleague', 'itemName', 'description', 'location', 'link'],
-  creative: ['type', 'title', 'author', 'body', 'link'],
-  selfdev: ['title', 'summary', 'source', 'link', 'readMinutes'],
+  matches: ['league', 'home', 'away', 'day', 'time', 'channel', 'stadium', 'size'],
+  recommendations: ['category', 'title', 'colleague', 'itemName', 'description', 'location', 'link', 'size'],
+  creative: ['type', 'title', 'author', 'body', 'link', 'size'],
+  selfdev: ['title', 'summary', 'source', 'link', 'readMinutes', 'size'],
   occasions: ['type', 'person', 'text'],
 };
 
 function cleanItem(fields, item) {
   const out = { id: /^[a-f0-9]{12}$/.test(item.id) ? item.id : id() };
   for (const f of fields) out[f] = str(item[f], f === 'body' || f === 'summary' || f === 'description' ? 5000 : 300);
+  if ('size' in out && !SIZES.includes(out.size)) out.size = ''; // فاضي = حسب إعداد القسم
   return out;
 }
 
@@ -537,8 +545,9 @@ async function api(req, res, url) {
 
     if (m === 'POST' && p === '/api/admin/logo') {
       const old = db.issue.logo;
-      db.issue.logo = body.image ? saveImage(body.image) : '';
-      if (old) deleteImage(old);
+      db.issue.logo = body.reset ? '/logo.png' : body.image ? saveImage(body.image) : '';
+      db.issue.logoRemoved = !db.issue.logo;
+      if (old && old.startsWith('/uploads/') && old !== db.issue.logo) deleteImage(old);
       save(); broadcast();
       return send(res, 200, { logo: db.issue.logo });
     }

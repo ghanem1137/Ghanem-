@@ -151,7 +151,8 @@ ${login}
 <!-- مكتبة رموز QR (MIT — Kazuhiko Arase) -->
 ${inlineScript(read('vendor/qrcode.js'))}
 <!-- بديل الخادم داخل المتصفح -->
-${inlineScript(fs.readFileSync(path.join(__dirname, 'standalone-backend.js'), 'utf8'))}
+${inlineScript(swap(fs.readFileSync(path.join(__dirname, 'standalone-backend.js'), 'utf8'), '__DEFAULT_LOGO__',
+  'data:image/png;base64,' + fs.readFileSync(path.join(PUB, 'logo.png')).toString('base64'), 'default logo'))}
 <!-- أدوات مشتركة -->
 ${inlineScript(common)}
 <!-- الموجّه -->

@@ -13,11 +13,19 @@ const siteUrl = () => pub.issue.siteUrl || location.origin;
 // ---------- تعريف الحقول ----------
 
 const sel = (opts) => ({ type: 'select', opts });
+// أحجام المشاركات في الصفحة
+const SIZE_LABELS = { sm: 'صغير (٤ في الصف)', md: 'متوسط (٣ في الصف)', lg: 'كبير (٢ في الصف)', full: 'عرض كامل' };
+const SINGLE_SIZE_LABELS = { sm: 'صغير', md: 'متوسط', lg: 'كبير', full: 'عرض كامل' };
+const ITEM_SIZE = ['الحجم في الصفحة', sel({ '': 'حسب حجم القسم', ...SIZE_LABELS })];
+const SINGLE_SECTIONS = ['poll', 'quiz', 'box']; // أقسام فيها بطاقة وحدة: الحجم يتحكم بعرضها
+const NO_SIZE = ['occasions'];
+const sizeOpts = (key) => (SINGLE_SECTIONS.includes(key) ? SINGLE_SIZE_LABELS : SIZE_LABELS);
 const LIST_SCHEMAS = {
   matches: {
     label: 'مباراة', fields: {
       league: ['الدوري', 'text'], day: ['اليوم', sel({ 'الجمعة': 'الجمعة', 'السبت': 'السبت' })], time: ['الوقت', 'text'],
       home: ['الفريق الأول', 'text'], away: ['الفريق الثاني', 'text'], stadium: ['الملعب', 'text'], channel: ['القناة', 'text'],
+      size: ITEM_SIZE,
     },
   },
   recommendations: {
@@ -25,19 +33,20 @@ const LIST_SCHEMAS = {
       category: ['النوع', sel(Object.fromEntries(Object.entries(LABELS.rec).map(([k, v]) => [k, v.join(' ')])))],
       title: ['العنوان (مثل: قهوة الجمعة)', 'text'], colleague: ['اسم الزميل', 'text'], itemName: ['اسم المكان / الفيلم / الكتاب', 'text'],
       description: ['ليش ينصح فيه؟', 'textarea'], location: ['الموقع (اختياري)', 'text'], link: ['رابط أو رابط تحميل الكتاب (يطلع له QR)', 'url'],
+      size: ITEM_SIZE,
     },
   },
   creative: {
     label: 'مشاركة', fields: {
       type: ['النوع', sel(Object.fromEntries(Object.entries(LABELS.creative).map(([k, v]) => [k, v.join(' ')])))],
       title: ['العنوان', 'text'], author: ['اسم الزميل', 'text'], body: ['النص (المقالة أو القصيدة أو نبذة عن الحلقة)', 'textarea'],
-      link: ['رابط (للبودكاست أو المقالة الكاملة)', 'url'],
+      link: ['رابط (للبودكاست أو المقالة الكاملة)', 'url'], size: ITEM_SIZE,
     },
   },
   selfdev: {
     label: 'مقالة', fields: {
       title: ['العنوان', 'text'], summary: ['الملخص', 'textarea'], source: ['الكاتب / المصدر', 'text'],
-      readMinutes: ['مدة القراءة (دقائق)', 'number'], link: ['رابط المقالة', 'url'],
+      readMinutes: ['مدة القراءة (دقائق)', 'number'], link: ['رابط المقالة', 'url'], size: ITEM_SIZE,
     },
   },
   occasions: {
@@ -153,6 +162,7 @@ const views = {
         ${i.logo ? `<img src="${esc(i.logo)}" alt="الشعار الحالي">` : '<span class="muted">ما فيه شعار مرفوع</span>'}
         <label class="btn ghost sm">⬆️ رفع الشعار (PNG بخلفية شفافة أفضل)<input type="file" id="logo-file" accept="image/png,image/jpeg,image/webp" hidden></label>
         ${i.logo ? '<button type="button" class="pill" id="logo-del">حذف الشعار</button>' : ''}
+        ${i.logo !== '/logo.png' ? '<button type="button" class="pill" id="logo-reset">استعادة الشعار الأساسي</button>' : ''}
       </div>
       ${field('siteUrl', 'رابط المنصة للموظفين (يُستخدم في QR والإيميلات)، مثل http://192.168.1.25:3000', 'url', i.siteUrl)}
       <p class="muted small">إذا تركته فاضي نستخدم الرابط اللي فاتح منه الحين: <span class="cred">${esc(location.origin)}</span></p>
@@ -173,6 +183,7 @@ const views = {
           ${field('emoji', 'أيقونة', 'text', s.emoji)}${field('nav', 'الاسم في القائمة', 'text', s.nav)}
           ${field('title', 'العنوان', 'text', s.title)}${field('subtitle', 'العنوان الفرعي', 'text', s.subtitle)}
         </div>
+        ${NO_SIZE.includes(s.key) ? '' : `<div class="row">${field('size', 'حجم المشاركات في هذا القسم', sel(sizeOpts(s.key)), s.size || 'md')}</div>`}
       </div>`;
     return `<p class="notice">✏️ غيّر عناوين الأقسام وعناوينها الفرعية متى ما تبي. رتّب أماكنها في الصفحة بسحب ⠿ أو بالأسهم.
       إذا ما فيه مشاركة في قسم هالأسبوع، شيل علامة "ظاهر للموظفين" ومحتواه يبقى محفوظ، وترجّعه الأسبوع الجاي بنفس الطريقة.</p>
@@ -313,25 +324,33 @@ function visBar() {
     <span>${sec.visible
       ? '<span class="state on">ظاهر</span> هذا القسم ظاهر للموظفين في الصفحة'
       : '<span class="state off">مخفي</span> هذا القسم مخفي عن الموظفين، ومحتواه محفوظ لين ترجّعه'}</span>
-    <button type="button" class="btn sm ${sec.visible ? 'ghost' : ''}" id="toggle-vis">${sec.visible ? '🙈 إخفاء القسم هذا الأسبوع' : '👁️ إظهار القسم'}</button>
+    <span class="actions">
+      ${NO_SIZE.includes(sec.key) ? '' : `<label class="size-pick">📐 حجم المشاركات
+        <select id="sec-size">${Object.entries(sizeOpts(sec.key)).map(([k, v]) => `<option value="${k}" ${k === (sec.size || 'md') ? 'selected' : ''}>${v}</option>`).join('')}</select></label>`}
+      <button type="button" class="btn sm ${sec.visible ? 'ghost' : ''}" id="toggle-vis">${sec.visible ? '🙈 إخفاء القسم هذا الأسبوع' : '👁️ إظهار القسم'}</button>
+    </span>
   </div>`;
 }
 
 function bindVis() {
   const b = $('#toggle-vis');
   if (!b) return;
-  b.onclick = async () => {
-    const key = TAB_SECTION[tab];
-    const sections = pub.sections.map((x) => (x.key === key ? { ...x, visible: !x.visible } : x));
+  const key = TAB_SECTION[tab];
+  const saveSection = async (change, msg) => {
+    const sections = pub.sections.map((x) => (x.key === key ? { ...x, ...change } : x));
     try {
       await adminApi('/api/admin/section/sections', { method: 'PUT', body: { sections } });
       pub.sections = sections;
       $('#vis-bar').outerHTML = visBar();
       bindVis();
       renderTabsBar();
-      toast(sections.find((x) => x.key === key).visible ? 'رجع القسم للصفحة ✅' : 'تم إخفاء القسم، ومحتواه محفوظ ✅');
+      toast(msg(sections.find((x) => x.key === key)));
     } catch (err) { toast(err.message, true); }
   };
+  b.onclick = () => saveSection({ visible: !pub.sections.find((x) => x.key === key).visible },
+    (s) => (s.visible ? 'رجع القسم للصفحة ✅' : 'تم إخفاء القسم، ومحتواه محفوظ ✅'));
+  const size = $('#sec-size');
+  if (size) size.onchange = () => saveSection({ size: size.value }, () => 'تم تغيير حجم المشاركات ✅');
 }
 
 // ---------- السحب والإفلات لتغيير الأماكن (والأسهم تشتغل بعد على الجوال) ----------
@@ -444,6 +463,7 @@ function collectSections() {
     emoji: $('[name=emoji]', el).value, nav: $('[name=nav]', el).value,
     title: $('[name=title]', el).value, subtitle: $('[name=subtitle]', el).value,
     visible: $('[name=visible]', el).checked,
+    size: $('[name=size]', el)?.value || pub.sections.find((x) => x.key === el.dataset.key)?.size,
   }));
 }
 
@@ -518,6 +538,10 @@ function bindLogo() {
       toast('تم رفع الشعار ✅');
       await load();
     } catch (err) { toast(err.message, true); }
+  };
+  const reset = $('#logo-reset');
+  if (reset) reset.onclick = async () => {
+    try { await adminApi('/api/admin/logo', { method: 'POST', body: { reset: true } }); toast('رجع الشعار الأساسي ✅'); await load(); } catch (err) { toast(err.message, true); }
   };
   const del = $('#logo-del');
   if (del) del.onclick = async () => {
@@ -683,8 +707,8 @@ function buildEmail(weather) {
 <table role="presentation" align="center" width="640" cellpadding="0" cellspacing="0" style="width:100%;max-width:640px;margin:0 auto;background:#f2f4f6;${E.font}color:#17303d;direction:rtl;text-align:right;">
 <tr><td><table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>${EMAIL_STRIPE}</tr></table></td></tr>
 <tr><td style="background:#114b5f;color:#ffffff;padding:22px;">
-  ${i.logo ? `<img src="${esc(siteUrl() + i.logo)}" height="44" alt="" style="height:44px;width:auto;margin:0 0 6px;">` : ''}
-  ${i.orgName ? `<p style="margin:0;font-size:14px;font-weight:bold;">${esc(i.orgName)}</p>` : ''}
+  ${i.logo ? `<span style="display:inline-block;background:#ffffff;padding:6px 12px;border-radius:6px;"><img src="${esc(siteUrl() + i.logo)}" height="64" alt="${esc(i.orgName)}" style="display:block;height:64px;width:auto;"></span>`
+    : i.orgName ? `<p style="margin:0;font-size:14px;font-weight:bold;">${esc(i.orgName)}</p>` : ''}
   <p style="margin:14px 0 0;font-size:13px;color:#8fd0ea;">نشرة أسبوعية · العدد ${esc(arNum(i.number))}${dates ? ' · ' + esc(dates) : ''}</p>
   <h1 style="margin:4px 0 6px;font-size:30px;color:#ffffff;">${esc(i.title || 'ويكند سعيد')} ☀️</h1>
   <p style="margin:0;font-size:16px;">${esc(i.greeting)}</p>${wline}

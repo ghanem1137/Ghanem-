@@ -18,6 +18,10 @@
     del(k) { try { localStorage.removeItem(k); } catch { /* تجاهل */ } },
   };
 
+  // الشعار الأساسي يندمج داخل الملف وقت البناء (build-single.js)
+  const DEFAULT_LOGO = '__DEFAULT_LOGO__';
+  const SIZES = ['sm', 'md', 'lg', 'full'];
+  const DEFAULT_SIZES = { occasions: 'md', matches: 'sm', poll: 'full', recs: 'md', lens: 'sm', creative: 'full', selfdev: 'md', quiz: 'full', box: 'full' };
   const SECTIONS = [
     ['occasions', '🎉', 'مناسبات الزملاء', 'نفرح لفرحهم ونرحّب بالجدد', 'المناسبات'],
     ['matches', '⚽', 'مباريات الويكند', 'أقوى أربع مباريات الجمعة والسبت، جهّز القهوة والمكسرات 🍿', 'المباريات'],
@@ -28,7 +32,7 @@
     ['selfdev', '🌱', 'طوّر نفسك على رواق', 'قراءات قصيرة تنفعك بدون ما تثقل عليك', 'طوّر نفسك'],
     ['quiz', '🧩', 'مسابقة الويكند السريعة', 'سؤال خفيف، وجاوب صح وادخل السحب', 'المسابقة'],
     ['box', '📮', 'صندوق المشاركات والاقتراحات', 'عندك توصية، مقالة، قصيدة، فكرة للعدد الجاي، أو ملاحظة؟ هذا مكانها', 'شاركنا'],
-  ].map(([key, emoji, title, subtitle, nav]) => ({ key, emoji, title, subtitle, nav, visible: true }));
+  ].map(([key, emoji, title, subtitle, nav]) => ({ key, emoji, title, subtitle, nav, visible: true, size: DEFAULT_SIZES[key] }));
 
   // ---------- كلمات المرور (SHA-256 مع ملح) ----------
   async function hashPassword(pw, salt = rid() + rid()) {
@@ -58,7 +62,7 @@
       issue: {
         number: 1, title: 'ويكند سعيد', greeting: 'هلا والله! هذا أول عدد من نشرتنا، وبنكمّلها سوا كل ويكند 😊',
         dateFrom: '', dateTo: '', quote: '', footer: 'ويكند سعيد — من الفريق، للفريق 💛', siteUrl: '',
-        orgName: 'المكتب الاستراتيجي لتطوير منطقة جازان', orgNameEn: 'JAZAN REGION DEVELOPMENT STRATEGIC OFFICE', logo: '',
+        orgName: 'المكتب الاستراتيجي لتطوير منطقة جازان', orgNameEn: 'JAZAN REGION DEVELOPMENT STRATEGIC OFFICE', logo: DEFAULT_LOGO,
       },
       sections: SECTIONS,
       weather: { enabled: true, city: 'جازان', lat: 16.8892, lon: 42.5511 },
@@ -76,6 +80,8 @@
     if (db) return;
     try { db = JSON.parse(ls.get(KEY)); } catch { db = null; }
     if (!db) { db = await seed(); persist(); }
+    db.sections = normalizeSections(db.sections);
+    if (!db.issue.logo && !db.issue.logoRemoved) db.issue.logo = DEFAULT_LOGO;
   }
   function persist() {
     if (!ls.set(KEY, JSON.stringify(db))) throw err(507, 'مساحة التخزين في المتصفح امتلأت، احذف بعض الصور القديمة من لوحة الإدارة');
@@ -106,19 +112,24 @@
   const EMAIL_RE = /^[^\s@,;<>"']+@[^\s@,;<>"']+\.[^\s@,;<>"']+$/;
   const publicUser = (u) => ({ id: u.id, name: u.name, email: u.email, username: u.username, isAdmin: !!u.isAdmin, createdAt: u.createdAt, lastLogin: u.lastLogin || null });
   const LIST = {
-    matches: ['league', 'home', 'away', 'day', 'time', 'channel', 'stadium'],
-    recommendations: ['category', 'title', 'colleague', 'itemName', 'description', 'location', 'link'],
-    creative: ['type', 'title', 'author', 'body', 'link'],
-    selfdev: ['title', 'summary', 'source', 'link', 'readMinutes'],
+    matches: ['league', 'home', 'away', 'day', 'time', 'channel', 'stadium', 'size'],
+    recommendations: ['category', 'title', 'colleague', 'itemName', 'description', 'location', 'link', 'size'],
+    creative: ['type', 'title', 'author', 'body', 'link', 'size'],
+    selfdev: ['title', 'summary', 'source', 'link', 'readMinutes', 'size'],
     occasions: ['type', 'person', 'text'],
   };
-  const cleanItem = (fields, it) => { const o = { id: /^[a-f0-9]{12}$/.test(it.id) ? it.id : rid() }; for (const f of fields) o[f] = str(it[f], 5000); return o; };
+  const cleanItem = (fields, it) => {
+    const o = { id: /^[a-f0-9]{12}$/.test(it.id) ? it.id : rid() };
+    for (const f of fields) o[f] = str(it[f], 5000);
+    if ('size' in o && !SIZES.includes(o.size)) o.size = '';
+    return o;
+  };
   function normalizeSections(list) {
     const out = [];
     for (const s of Array.isArray(list) ? list : []) {
       const d = SECTIONS.find((x) => x.key === s?.key);
       if (!d || out.some((x) => x.key === s.key)) continue;
-      out.push({ key: s.key, emoji: str(s.emoji, 8), title: str(s.title, 120) || d.title, subtitle: str(s.subtitle, 300), nav: str(s.nav, 40) || d.nav, visible: s.visible !== false });
+      out.push({ key: s.key, emoji: str(s.emoji, 8), title: str(s.title, 120) || d.title, subtitle: str(s.subtitle, 300), nav: str(s.nav, 40) || d.nav, visible: s.visible !== false, size: SIZES.includes(s.size) ? s.size : d.size });
     }
     for (const d of SECTIONS) if (!out.some((x) => x.key === d.key)) out.push({ ...d });
     return out;
@@ -286,7 +297,9 @@
       }
       if (m === 'POST' && p === '/api/admin/logo') {
         need(!body.image || /^data:image\/(png|jpeg|webp);base64,/.test(body.image), 'الصورة لازم تكون PNG أو JPG أو WEBP');
-        db.issue.logo = body.image || ''; save(); broadcast(); return { logo: db.issue.logo };
+        db.issue.logo = body.reset ? DEFAULT_LOGO : body.image || '';
+        db.issue.logoRemoved = !db.issue.logo;
+        save(); broadcast(); return { logo: db.issue.logo };
       }
       if (m === 'POST' && p === '/api/admin/quiz/draw') {
         const ok = new Set(db.quiz.accepted.map(normalizeArabic));
