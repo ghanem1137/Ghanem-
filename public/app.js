@@ -57,8 +57,8 @@ function interact(targetId) {
   return `
   <div class="interact" data-target="${esc(targetId)}">
     <div class="interact-bar">
-      <button class="pill like ${lk.mine ? 'on' : ''}" data-act="like" aria-pressed="${lk.mine}">${lk.mine ? '❤️' : '🤍'} ${lk.count || ''} عجبني</button>
-      <button class="pill" data-act="toggle-comments" aria-expanded="${open}">💬 ${cs.length || ''} تعليق</button>
+      <button class="pill like ${lk.mine ? 'on' : ''}" data-act="like" aria-pressed="${lk.mine}">${icon('heart')} عجبني${lk.count ? ` <b>${arNum(lk.count)}</b>` : ''}</button>
+      <button class="pill" data-act="toggle-comments" aria-expanded="${open}">${icon('comment')} تعليق${cs.length ? ` <b>${arNum(cs.length)}</b>` : ''}</button>
     </div>
     ${open ? `
     <div class="comments">
@@ -154,7 +154,11 @@ function renderSections() {
     extra.innerHTML = (layoutMode && state.me.isAdmin ? sectionTools(s) : '') + attachments(s);
     const empty = s.key === 'occasions' && !state.occasions.length;
     el.hidden = !s.visible || empty;
-    $('.sec-head h2', el).textContent = [s.emoji, s.title].filter(Boolean).join(' ');
+    $('.sec-head h2', el).textContent = s.title;
+    $('.sec-ic', el).innerHTML = icon(s.key);
+    const n = sectionCount(s.key);
+    $('.sec-count', el).textContent = n === null ? '' : arNum(n);
+    $('.sec-count', el).hidden = n === null;
     $('.sec-head p', el).textContent = s.subtitle;
     // زر تعديل سريع للإدارة: يفتح لوحة الإدارة على محتوى هذا القسم
     if (state.me.isAdmin && !$('.edit-sec', el)) {
@@ -166,6 +170,54 @@ function renderSections() {
     if (!el.hidden) nav.push(`<a href="#${s.key}">${esc([s.emoji, s.nav].filter(Boolean).join(' '))}</a>`);
   }
   $('#nav').innerHTML = nav.join('');
+  renderSide();
+  renderDist();
+}
+
+// عدد المشاركات في كل قسم (يظهر جنب العنوان وفي القائمة الجانبية وشريط التوزيع)
+function sectionCount(key) {
+  switch (key) {
+    case 'matches': return state.matches.length;
+    case 'recs': return state.recommendations.length;
+    case 'creative': return state.creative.length;
+    case 'selfdev': return state.selfdev.length;
+    case 'occasions': return state.occasions.length;
+    case 'lens': return state.photos.length;
+    case 'poll': return state.poll.home ? state.poll.counts.home + state.poll.counts.draw + state.poll.counts.away : 0;
+    case 'quiz': return state.quiz.question ? state.quiz.answersCount : 0;
+    default: return null;
+  }
+}
+const COUNT_WORD = { poll: 'صوت', quiz: 'مشارك', lens: 'صورة' };
+const countText = (key, n) => `${arNum(n)} ${COUNT_WORD[key] || 'مشاركة'}`;
+const visibleSections = () => state.sections.filter((s) => { const el = document.getElementById(s.key); return el && !el.hidden; });
+
+// القائمة الجانبية: أقسام العدد بألوانها وأعدادها
+function renderSide() {
+  $('#side').innerHTML = `<div class="side-card">
+    <h3>أقسام العدد</h3><p class="muted small">اختر قسماً للانتقال إليه</p>
+    <ul>${visibleSections().map((s) => {
+      const n = sectionCount(s.key);
+      return `<li><a href="#${s.key}" class="side-item" data-acc="${document.getElementById(s.key).dataset.acc}">
+        <span class="side-ic">${icon(s.key)}</span>
+        <span class="side-txt"><b>${esc(s.title)}</b><small>${n === null ? esc(s.nav) : countText(s.key, n)}</small></span>
+        ${n === null ? '' : `<span class="side-n">${arNum(n)}</span>`}
+      </a></li>`;
+    }).join('')}</ul>
+    <div class="stripe side-stripe" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i></div>
+    <p class="muted small">لون كل قسم يميّزه في الصفحة.</p>
+  </div>`;
+}
+
+// شريط توزيع محتوى العدد حسب القسم (مثل شريط "توزيع المخرجات" في هوية الجهة)
+function renderDist() {
+  const parts = visibleSections().map((s) => ({ s, n: sectionCount(s.key) })).filter((x) => x.n);
+  const box = $('#dist');
+  box.hidden = !parts.length;
+  if (!parts.length) return;
+  box.innerHTML = `<div class="dist-head"><h3>محتوى هذا العدد</h3><span class="muted small">اضغط على أي جزء للانتقال إلى القسم</span></div>
+    <div class="dist-bar">${parts.map(({ s, n }) => `<a href="#${s.key}" style="flex-grow:${n}" data-acc="${document.getElementById(s.key).dataset.acc}" title="${esc(s.title)}: ${n}">${arNum(n)}</a>`).join('')}</div>
+    <div class="dist-legend">${parts.map(({ s, n }) => `<a href="#${s.key}" data-acc="${document.getElementById(s.key).dataset.acc}"><i></i>${esc(s.title)} <b>${arNum(n)}</b></a>`).join('')}</div>`;
 }
 
 function renderOccasions() {
@@ -176,12 +228,19 @@ function renderOccasions() {
   }).join('');
 }
 
+// أول حرف من اسم الفريق (بدون "ال" عشان ما تطلع كل الفرق "ا")
+const initial = (name) => (String(name || '؟').trim().replace(/^ال(?=\S{2,})/, '')[0] || '؟');
+
 function renderMatches() {
   $('#matches-list').innerHTML = state.matches.map((m) => `
     <article class="card match ${sz(m)}">${sizeTools('matches', m)}
-      <div class="match-top"><span class="league">${esc(m.league)}</span><span class="day">${esc(m.day)} · ${esc(m.time)}</span></div>
-      <div class="teams"><span>${esc(m.home)}</span><span class="vs">VS</span><span>${esc(m.away)}</span></div>
-      <div class="match-meta">${m.stadium ? `🏟️ ${esc(m.stadium)}` : ''} ${m.channel ? `<span>📺 ${esc(m.channel)}</span>` : ''}</div>
+      <div class="card-top"><span class="tag">${esc(m.league || 'مباراة')}</span><span class="meta">${icon('calendar')} ${esc(m.day)} · ${esc(m.time)}</span></div>
+      <div class="teams">
+        <span class="team"><i>${esc(initial(m.home))}</i>${esc(m.home)}</span>
+        <span class="vs">VS</span>
+        <span class="team"><i>${esc(initial(m.away))}</i>${esc(m.away)}</span>
+      </div>
+      <div class="match-meta">${m.stadium ? `<span>${icon('flag')} ${esc(m.stadium)}</span>` : ''}${m.channel ? `<span>${icon('tv')} ${esc(m.channel)}</span>` : ''}</div>
       ${attachments(m)}
       ${interact(m.id)}
     </article>`).join('') || '<p class="card empty">⚽ مباريات الويكند تنزل قريب… جهّز القهوة!</p>';
@@ -227,15 +286,13 @@ function renderRecs() {
     const isBook = r.category === 'book';
     return `
     <article class="card rec cat-${esc(r.category)} ${sz(r)}">${sizeTools('recs', r)}
-      <div class="rec-head"><span class="rec-ic">${ic}</span><div>
-        <span class="tag">${esc(cat)}</span>
-        <h3>${esc(r.title || cat)} ${isBook ? 'ينصح فيه' : 'برأي'} زميلنا <span class="who">${esc(r.colleague)}</span></h3>
-      </div></div>
+      <div class="card-top"><span class="tag">${ic} ${esc(cat)}</span><span class="meta">${icon('user')} ${esc(r.colleague)}</span></div>
+      <h3>${esc(r.title || cat)} ${isBook ? 'ينصح فيه' : 'برأي'} زميلنا <span class="who">${esc(r.colleague)}</span></h3>
       <h4>${esc(r.itemName)}</h4>
       <p>${esc(r.description)}</p>
-      ${r.location ? `<p class="muted small">📍 ${esc(r.location)}</p>` : ''}
+      ${r.location ? `<p class="meta">${icon('pin')} ${esc(r.location)}</p>` : ''}
       ${link ? `<div class="rec-link">
-        <a class="btn sm" href="${esc(link)}" target="_blank" rel="noopener">${isBook ? '📥 تحميل / قراءة الكتاب' : '🔗 الرابط'}</a>
+        <a class="btn sm ghost" href="${esc(link)}" target="_blank" rel="noopener">${isBook ? `${icon('download')} تحميل / قراءة الكتاب` : `${icon('link')} الرابط`}</a>
         ${isBook ? `<div class="qr" data-qr="${esc(link)}" title="امسح الكود من جوالك"></div>` : ''}</div>` : ''}
       ${attachments(r)}
       ${interact(r.id)}
@@ -268,14 +325,11 @@ function renderCreative() {
     const long = c.body.length > 280;
     return `
     <article class="card creative-item type-${esc(c.type)} ${sz(c)}">${sizeTools('creative', c)}
-      <div class="rec-head"><span class="rec-ic">${ic}</span><div>
-        <span class="tag">${esc(t)}</span>
-        <h3>${esc(c.title)}</h3>
-        <p class="muted small">بقلم وصوت زميلنا <b>${esc(c.author)}</b></p>
-      </div></div>
+      <div class="card-top"><span class="tag">${ic} ${esc(t)}</span><span class="meta">${icon('user')} بقلم ${esc(c.author)}</span></div>
+      <h3>${esc(c.title)}</h3>
       ${c.body ? `<div class="body ${c.type === 'poem' ? 'poem' : ''} ${long ? 'clamp' : ''}">${esc(c.body)}</div>` : ''}
       ${long ? '<button class="link-btn" data-act="expand">اقرأ أكثر / أقل</button>' : ''}
-      ${link ? `<a class="btn sm" href="${esc(link)}" target="_blank" rel="noopener">${c.type === 'podcast' ? '🎧 استمع' : '🔗 افتح'}</a>` : ''}
+      ${link ? `<a class="btn sm ghost" href="${esc(link)}" target="_blank" rel="noopener">${icon('link')} ${c.type === 'podcast' ? 'استمع للحلقة' : 'افتح المصدر'}</a>` : ''}
       ${attachments(c)}
       ${interact(c.id)}
     </article>`;
@@ -287,10 +341,11 @@ function renderSelfdev() {
     const link = safeUrl(s.link);
     return `
     <article class="card selfdev ${sz(s)}">${sizeTools('selfdev', s)}
-      <h3>🌱 ${esc(s.title)}</h3>
+      <div class="card-top"><span class="tag">مقالة</span>${s.readMinutes ? `<span class="meta">${icon('clock')} ${arNum(s.readMinutes)} دقائق قراءة</span>` : ''}</div>
+      <h3>${esc(s.title)}</h3>
+      ${s.source ? `<p class="meta">${icon('user')} ${esc(s.source)}</p>` : ''}
       <p>${esc(s.summary)}</p>
-      <p class="muted small">${s.source ? `✍️ ${esc(s.source)}` : ''} ${s.readMinutes ? ` · ⏱️ ${esc(s.readMinutes)} دقائق قراءة` : ''}</p>
-      ${link ? `<a class="btn sm ghost" href="${esc(link)}" target="_blank" rel="noopener">كمّل القراءة</a>` : ''}
+      ${link ? `<a class="btn sm ghost" href="${esc(link)}" target="_blank" rel="noopener">${icon('link')} كمّل القراءة</a>` : ''}
       ${attachments(s)}
       ${interact(s.id)}
     </article>`;

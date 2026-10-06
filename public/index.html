@@ -48,32 +48,35 @@
       <div class="stat c3 w-day" id="w-sat" hidden></div>
       <div class="stat c4" id="countdown"></div>
     </div>
+    <div class="card dist" id="dist" hidden></div>
     <nav class="chips" id="nav"></nav>
   </div>
 
-  <main class="wrap">
+  <div class="wrap page">
+  <aside class="side" id="side" aria-label="أقسام العدد"></aside>
+  <main id="main">
     <section id="occasions" class="occasions">
-      <div class="sec-head"><h2></h2><p></p></div>
+      <div class="sec-head"><div class="sec-title"><span class="sec-ic"></span><h2></h2><span class="sec-count"></span><i class="sec-line"></i></div><p></p></div>
       <div class="grid" id="occasions-list"></div>
     </section>
 
     <section id="matches">
-      <div class="sec-head"><h2></h2><p></p></div>
+      <div class="sec-head"><div class="sec-title"><span class="sec-ic"></span><h2></h2><span class="sec-count"></span><i class="sec-line"></i></div><p></p></div>
       <div class="grid matches" id="matches-list"></div>
     </section>
 
     <section id="poll">
-      <div class="sec-head"><h2></h2><p></p></div>
+      <div class="sec-head"><div class="sec-title"><span class="sec-ic"></span><h2></h2><span class="sec-count"></span><i class="sec-line"></i></div><p></p></div>
       <div class="card poll single" id="poll-box"></div>
     </section>
 
     <section id="recs">
-      <div class="sec-head"><h2></h2><p></p></div>
+      <div class="sec-head"><div class="sec-title"><span class="sec-ic"></span><h2></h2><span class="sec-count"></span><i class="sec-line"></i></div><p></p></div>
       <div class="grid recs" id="recs-list"></div>
     </section>
 
     <section id="lens">
-      <div class="sec-head"><h2></h2><p></p></div>
+      <div class="sec-head"><div class="sec-title"><span class="sec-ic"></span><h2></h2><span class="sec-count"></span><i class="sec-line"></i></div><p></p></div>
       <div id="lens-featured"></div>
       <div class="grid gallery" id="lens-gallery"></div>
       <details class="card form-card">
@@ -88,22 +91,22 @@
     </section>
 
     <section id="creative">
-      <div class="sec-head"><h2></h2><p></p></div>
+      <div class="sec-head"><div class="sec-title"><span class="sec-ic"></span><h2></h2><span class="sec-count"></span><i class="sec-line"></i></div><p></p></div>
       <div class="grid" id="creative-list"></div>
     </section>
 
     <section id="selfdev">
-      <div class="sec-head"><h2></h2><p></p></div>
+      <div class="sec-head"><div class="sec-title"><span class="sec-ic"></span><h2></h2><span class="sec-count"></span><i class="sec-line"></i></div><p></p></div>
       <div class="grid" id="selfdev-list"></div>
     </section>
 
     <section id="quiz">
-      <div class="sec-head"><h2></h2><p></p></div>
+      <div class="sec-head"><div class="sec-title"><span class="sec-ic"></span><h2></h2><span class="sec-count"></span><i class="sec-line"></i></div><p></p></div>
       <div class="card quiz single" id="quiz-box"><div id="quiz-main"></div><div id="quiz-interact"></div></div>
     </section>
 
     <section id="box">
-      <div class="sec-head"><h2></h2><p></p></div>
+      <div class="sec-head"><div class="sec-title"><span class="sec-ic"></span><h2></h2><span class="sec-count"></span><i class="sec-line"></i></div><p></p></div>
       <form id="suggest-form" class="card form single">
         <div class="row">
           <label>نوع المشاركة
@@ -125,8 +128,11 @@
       </form>
     </section>
   </main>
+  </div>
 
   <footer class="footer">
+    <div class="pattern" aria-hidden="true"></div>
+    <div class="stripe" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i></div>
     <div class="wrap">
       <p class="quote" id="issue-quote"></p>
       <p class="muted" id="issue-footer"></p>
