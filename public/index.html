@@ -1,0 +1,159 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ويكند سعيد</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&display=swap">
+  <link rel="stylesheet" href="/styles.css">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>☀️</text></svg>">
+</head>
+<body class="loading">
+  <div class="stripe" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i></div>
+  <header class="hero">
+    <div class="wrap">
+      <div class="hero-bar">
+        <div class="brand">
+          <span class="logo-plate" id="logo-plate" hidden><img id="org-logo" alt=""></span>
+          <div id="org-text"><b id="org-name"></b><span id="org-name-en"></span></div>
+        </div>
+        <div class="userbar">
+          <span id="hello"></span>
+          <a href="/admin" id="admin-link" hidden>لوحة الإدارة</a>
+          <button type="button" class="link-btn" id="layout-toggle" hidden>📐 تنسيق الصفحة</button>
+          <button type="button" class="link-btn" id="pw-open">كلمة المرور</button>
+          <button type="button" class="link-btn" onclick="logout()">خروج</button>
+        </div>
+      </div>
+      <div class="hero-main">
+        <div class="hero-text">
+          <p class="eyebrow">نشرة أسبوعية للموظفين<span id="issue-dates"></span></p>
+          <h1 id="issue-title">ويكند سعيد</h1>
+          <p class="greeting" id="issue-greeting"></p>
+        </div>
+        <dl class="info-box">
+          <div><dt>العدد</dt><dd id="issue-no">—</dd></div>
+          <div><dt id="today-name">اليوم</dt><dd id="today"></dd><span id="today-hijri"></span></div>
+          <div><dt>الوقت</dt><dd id="clock"></dd></div>
+        </dl>
+      </div>
+    </div>
+  </header>
+
+  <div class="wrap">
+    <div class="stats" id="stats">
+      <div class="stat c1" id="weather" hidden></div>
+      <div class="stat c2 w-day" id="w-fri" hidden></div>
+      <div class="stat c3 w-day" id="w-sat" hidden></div>
+      <div class="stat c4" id="countdown"></div>
+    </div>
+    <div class="card dist" id="dist" hidden></div>
+    <nav class="chips" id="nav"></nav>
+  </div>
+
+  <div class="wrap page">
+  <aside class="side" id="side" aria-label="أقسام العدد"></aside>
+  <main id="main">
+    <section id="occasions" class="occasions">
+      <div class="sec-head"><div class="sec-title"><span class="sec-ic"></span><h2></h2><span class="sec-count"></span><i class="sec-line"></i></div><p></p></div>
+      <div class="grid" id="occasions-list"></div>
+    </section>
+
+    <section id="matches">
+      <div class="sec-head"><div class="sec-title"><span class="sec-ic"></span><h2></h2><span class="sec-count"></span><i class="sec-line"></i></div><p></p></div>
+      <div class="grid matches" id="matches-list"></div>
+    </section>
+
+    <section id="poll">
+      <div class="sec-head"><div class="sec-title"><span class="sec-ic"></span><h2></h2><span class="sec-count"></span><i class="sec-line"></i></div><p></p></div>
+      <div class="card poll single" id="poll-box"></div>
+    </section>
+
+    <section id="recs">
+      <div class="sec-head"><div class="sec-title"><span class="sec-ic"></span><h2></h2><span class="sec-count"></span><i class="sec-line"></i></div><p></p></div>
+      <div class="grid recs" id="recs-list"></div>
+    </section>
+
+    <section id="lens">
+      <div class="sec-head"><div class="sec-title"><span class="sec-ic"></span><h2></h2><span class="sec-count"></span><i class="sec-line"></i></div><p></p></div>
+      <div id="lens-featured"></div>
+      <div class="grid gallery" id="lens-gallery"></div>
+      <details class="card form-card">
+        <summary>📤 أرسل صورتك للعدد الجاي</summary>
+        <form id="photo-form" class="form">
+          <label>وش قصة الصورة؟ (اختياري)<input name="caption" maxlength="200" placeholder="مثلاً: غروب الشمس من كورنيش جازان"></label>
+          <label>الصورة (JPG أو PNG)<input name="image" type="file" accept="image/png,image/jpeg,image/webp" required></label>
+          <button class="btn">إرسال الصورة</button>
+          <p class="form-msg" role="status"></p>
+        </form>
+      </details>
+    </section>
+
+    <section id="creative">
+      <div class="sec-head"><div class="sec-title"><span class="sec-ic"></span><h2></h2><span class="sec-count"></span><i class="sec-line"></i></div><p></p></div>
+      <div class="grid" id="creative-list"></div>
+    </section>
+
+    <section id="selfdev">
+      <div class="sec-head"><div class="sec-title"><span class="sec-ic"></span><h2></h2><span class="sec-count"></span><i class="sec-line"></i></div><p></p></div>
+      <div class="grid" id="selfdev-list"></div>
+    </section>
+
+    <section id="quiz">
+      <div class="sec-head"><div class="sec-title"><span class="sec-ic"></span><h2></h2><span class="sec-count"></span><i class="sec-line"></i></div><p></p></div>
+      <div class="card quiz single" id="quiz-box"><div id="quiz-main"></div><div id="quiz-interact"></div></div>
+    </section>
+
+    <section id="box">
+      <div class="sec-head"><div class="sec-title"><span class="sec-ic"></span><h2></h2><span class="sec-count"></span><i class="sec-line"></i></div><p></p></div>
+      <form id="suggest-form" class="card form single">
+        <div class="row">
+          <label>نوع المشاركة
+            <select name="type">
+              <option>اقتراح للعدد الجاي</option>
+              <option>توصية (مطعم/كافيه/فيلم/كتاب)</option>
+              <option>مقالة أو بودكاست أو قصيدة</option>
+              <option>سؤال للمسابقة</option>
+              <option>تهنئة أو مناسبة لزميل</option>
+              <option>ملاحظة عامة</option>
+            </select>
+          </label>
+        </div>
+        <label>مشاركتك<textarea name="text" required maxlength="3000" rows="4" placeholder="اكتب براحتك…"></textarea></label>
+        <label>رابط (اختياري)<input name="link" type="url" maxlength="500" placeholder="https://"></label>
+        <label class="check"><input type="checkbox" name="anonymous"> أرسلها بدون اسمي</label>
+        <button class="btn">أرسل</button>
+        <p class="form-msg" role="status"></p>
+      </form>
+    </section>
+  </main>
+  </div>
+
+  <footer class="footer">
+    <div class="pattern" aria-hidden="true"></div>
+    <div class="stripe" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i></div>
+    <div class="wrap">
+      <p class="quote" id="issue-quote"></p>
+      <p class="muted" id="issue-footer"></p>
+    </div>
+  </footer>
+
+  <dialog id="pw-dialog" class="card">
+    <form id="pw-form" class="form">
+      <h3>🔑 تغيير كلمة المرور</h3>
+      <label>كلمة المرور الحالية<input name="current" type="password" autocomplete="current-password" required dir="ltr"></label>
+      <label>كلمة المرور الجديدة (8 أحرف أو أكثر)<input name="next" type="password" autocomplete="new-password" minlength="8" required dir="ltr"></label>
+      <label>أعد كتابة الجديدة<input name="confirm" type="password" autocomplete="new-password" minlength="8" required dir="ltr"></label>
+      <div class="actions"><button class="btn">حفظ</button><button type="button" class="btn ghost" id="pw-close">إلغاء</button></div>
+      <p class="form-msg" role="status"></p>
+    </form>
+  </dialog>
+
+  <div id="toast" class="toast" role="status" hidden></div>
+
+  <script src="/vendor/qrcode.js"></script>
+  <script src="/common.js"></script>
+  <script src="/app.js"></script>
+</body>
+</html>
