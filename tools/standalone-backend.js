@@ -337,6 +337,15 @@
         db.quiz.winner = { name: w.name, dept: w.dept, correctCount: pool.length, drawnAt: now() }; db.quiz.closed = true;
         save(); broadcast(); return { winner: db.quiz.winner };
       }
+      if (m === 'POST' && p === '/api/admin/photos') {
+        need(str(body.name, 80), 'اكتب اسم الزميل صاحب الصورة');
+        need(/^data:image\/(png|jpeg|webp);base64,/.test(body.image || ''), 'الصورة لازم تكون PNG أو JPG أو WEBP');
+        const photo = { id: rid(), userId: user.id, name: str(body.name, 80), caption: str(body.caption, 200), url: body.image, approved: true, createdAt: now() };
+        db.photos.push(photo);
+        if (body.featured) db.featuredPhotoId = photo.id;
+        try { save(); } catch (e) { db.photos.pop(); throw e; }
+        broadcast(); return { ok: true };
+      }
       mm = /^\/api\/admin\/photos\/(\w+)\/(approve|feature|delete)$/.exec(p);
       if (m === 'POST' && mm) {
         const ph = db.photos.find((x) => x.id === mm[1]); need(ph, 'الصورة غير موجودة');

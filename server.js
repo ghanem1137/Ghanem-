@@ -457,7 +457,7 @@ async function api(req, res, url) {
   if (m === 'GET' && p === '/api/state') return send(res, 200, publicState(user));
   if (m === 'GET' && p === '/api/weather') return send(res, 200, { weather: await getWeather() });
 
-  const big = { '/api/photos': 8, '/api/admin/logo': 8, '/api/admin/upload': 22 }[p];
+  const big = { '/api/photos': 8, '/api/admin/photos': 8, '/api/admin/logo': 8, '/api/admin/upload': 22 }[p];
   const body = await readBody(req, (big || 0.5) * 1024 * 1024);
 
   if (m === 'POST' && p === '/api/me/password') {
@@ -626,6 +626,17 @@ async function api(req, res, url) {
       db.quiz.closed = true;
       save(); broadcast();
       return send(res, 200, { winner: db.quiz.winner });
+    }
+
+    // المدير يرفع صورة وصلته من زميل (واتساب أو إيميل) باسم صاحبها، وتنعتمد على طول
+    if (m === 'POST' && p === '/api/admin/photos') {
+      const name = str(body.name, 80);
+      need(name, 'اكتب اسم الزميل صاحب الصورة');
+      const photo = { id: id(), userId: user.id, name, caption: str(body.caption, 200), url: saveImage(body.image), approved: true, createdAt: now() };
+      db.photos.push(photo);
+      if (body.featured) db.featuredPhotoId = photo.id;
+      save(); broadcast();
+      return send(res, 200, { ok: true });
     }
 
     const ph = /^\/api\/admin\/photos\/(\w+)\/(approve|feature|delete)$/.exec(p);

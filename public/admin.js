@@ -353,7 +353,18 @@ const views = {
   },
   lens() {
     const photos = [...priv.photos].reverse();
-    return `<p class="muted">الصور توصل هنا من الموظفين. "اعتماد" يخليها تظهر في المعرض، و"صورة العدد" تطلع كبيرة فوق.</p>
+    return `<form class="card form" id="f-photo-add" style="margin-bottom:18px;border-top:3px solid var(--c-orange)">
+      <h3>📤 رفع صورة وصلتك من زميل</h3>
+      <p class="muted small">للصور اللي وصلتك بالواتساب أو الإيميل: ارفعها هنا باسم صاحبها، وتظهر في الصفحة على طول.</p>
+      <div class="row">
+        <label>اسم الزميل صاحب الصورة<input name="name" required maxlength="80" placeholder="مثلاً: أحمد محمد"></label>
+        <label>وصف الصورة (اختياري)<input name="caption" maxlength="200" placeholder="مثلاً: غروب الشمس من كورنيش جازان"></label>
+      </div>
+      <label>الصورة (JPG أو PNG)<input type="file" name="image" accept="image/png,image/jpeg,image/webp" required></label>
+      ${check('featured', 'اجعلها صورة العدد (تطلع كبيرة فوق)', false)}
+      <button class="btn">⬆️ رفع الصورة</button>
+    </form>
+    <p class="muted">الصور اللي يرسلها الموظفين من الصفحة توصل هنا. "اعتماد" يخليها تظهر في المعرض، و"صورة العدد" تطلع كبيرة فوق.</p>
     <div class="admin-photos">${photos.map((p) => `
       <div class="card">
         <a href="${esc(p.url)}" target="_blank"><img src="${esc(p.url)}" alt=""></a>
@@ -525,6 +536,7 @@ function renderTab() {
   bindVis();
   if (tab === 'sections') return bindSections();
   if (tab === 'issue') bindLogo();
+  if (tab === 'lens') bindPhotoAdd();
   if (tab === 'users') return bindUsers();
   if (tab === 'email') return bindEmail();
   const f = $('#f');
@@ -631,6 +643,26 @@ function bindSections() {
       toast('تم حفظ إعدادات الطقس ✅');
       await load();
     } catch (err) { toast(err.message, true); }
+  };
+}
+
+// ---------- رفع صورة لعدسة الموظف باسم زميل ----------
+
+function bindPhotoAdd() {
+  const f = $('#f-photo-add');
+  if (!f) return;
+  f.onsubmit = async (e) => {
+    e.preventDefault();
+    const file = f.image.files[0];
+    if (!file) return toast('اختر صورة', true);
+    const btn = $('button.btn', f);
+    btn.disabled = true;
+    try {
+      const { data } = await shrinkImage(file);
+      await adminApi('/api/admin/photos', { method: 'POST', body: { name: f.name.value, caption: f.caption.value, image: data, featured: f.featured.checked } });
+      toast('تم رفع الصورة وظهرت في الصفحة ✅');
+      await load();
+    } catch (err) { toast(err.message, true); btn.disabled = false; }
   };
 }
 
