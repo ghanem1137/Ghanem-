@@ -124,7 +124,7 @@ const LIST_SCHEMAS = {
 };
 
 const TABS = {
-  issue: '📰 العدد', sections: '🗂️ الأقسام والعناوين', users: '👥 الموظفين', matches: '⚽ المباريات', poll: '🔮 الاستطلاع', recommendations: '💡 التوصيات',
+  issue: '📰 العدد', sections: '🗂️ ترتيب الأقسام وعناوينها', users: '👥 الموظفين', matches: '⚽ المباريات', poll: '🔮 الاستطلاع', recommendations: '💡 التوصيات',
   lens: '📸 عدسة الموظف', creative: '✍️ الإبداع', selfdev: '🌱 تطوير الذات', occasions: '🎉 المناسبات',
   quiz: '🧩 المسابقة', box: '📮 الصندوق', comments: '💬 التعليقات', email: '📧 نسخة الإيميل',
 };
@@ -160,7 +160,9 @@ function listEditor(key) {
   return `
     <form class="form" id="list-form">
       ${items.length > 1 ? '<p class="muted small">رتّب الأماكن بسحب ⠿ أو بالأسهم، وبعدها اضغط حفظ ونشر.</p>' : ''}
-      <div class="editor-list">${items.map(one).join('') || '<p class="muted">ما فيه عناصر بعد.</p>'}</div>
+      ${items.length ? '' : `<div class="empty-cta"><p>ما فيه ${esc(lbl === 'مباراة' ? 'مباريات' : lbl)} بعد هذا الأسبوع.</p>
+        <button type="button" class="btn" id="add-first">➕ إضافة ${esc(lbl)}</button></div>`}
+      <div class="editor-list">${items.map(one).join('')}</div>
       <div class="actions">
         <button type="button" class="btn ghost" id="add-item">➕ إضافة ${esc(lbl)}</button>
         <button class="btn" id="save-list">💾 حفظ ونشر</button>
@@ -197,6 +199,8 @@ function bindList(key) {
     renderTab();
     $('#save-list').textContent = '💾 حفظ ونشر (الترتيب تغيّر)';
   });
+  const first = $('#add-first');
+  if (first) first.onclick = () => $('#add-item').click();
   $('#add-item').onclick = () => {
     pub[key] = [...collectList(form), {}];
     renderTab();
@@ -240,8 +244,10 @@ const views = {
     const row = (s, i) => `
       <div class="item-editor ${s.visible ? '' : 'hidden-sec'}" data-key="${s.key}">
         <div class="head"><b><span class="drag" title="اسحب لتغيير المكان">⠿</span> ${i + 1}. ${esc(s.emoji)} ${esc(s.title)}
-          <span class="state ${s.visible ? 'on' : 'off'}">${s.visible ? 'ظاهر' : 'مخفي'}</span></b>
+          <span class="state ${s.visible ? 'on' : 'off'}">${s.visible ? 'ظاهر' : 'مخفي'}</span>
+          <span class="muted small hint">محتواه: ${esc(CONTENT_HINT[s.key] || '')}</span></b>
           <div class="actions">
+            <button type="button" class="btn sm" data-goto="${SECTION_TAB[s.key]}">✏️ تعبئة محتوى القسم</button>
             ${check('visible', 'ظاهر للموظفين', s.visible)}
             <button type="button" class="pill" data-smove="-1" title="لفوق">⬆️</button>
             <button type="button" class="pill" data-smove="1" title="لتحت">⬇️</button>
@@ -388,11 +394,47 @@ const TAB_SECTION = {
   matches: 'matches', poll: 'poll', recommendations: 'recs', lens: 'lens', creative: 'creative',
   selfdev: 'selfdev', occasions: 'occasions', quiz: 'quiz', box: 'box',
 };
+const SECTION_TAB = Object.fromEntries(Object.entries(TAB_SECTION).map(([t, k]) => [k, t]));
+// وش يكتب المدير في كل قسم (يظهر جنب زر تعبئة المحتوى)
+const CONTENT_HINT = {
+  matches: 'الفرق، الدوري، اليوم والوقت، الملعب والقناة',
+  poll: 'سؤال التصويت والفريقين أو الخيارين',
+  recs: 'التوصية (كافيه، مطعم، كتاب…) واسم الزميل والرابط',
+  lens: 'اعتماد صور الموظفين واختيار صورة العدد',
+  creative: 'المقالة أو القصيدة أو البودكاست واسم الكاتب',
+  selfdev: 'عنوان المقالة وملخصها والرابط',
+  occasions: 'اسم الزميل ونوع المناسبة والرسالة',
+  quiz: 'سؤال المسابقة والإجابات الصحيحة والجائزة',
+  box: 'قراءة مشاركات واقتراحات الموظفين',
+};
+// أسماء التبويبات تتبع عناوين الأقسام وترتيبها في الصفحة
+function tabOrder() {
+  const secTabs = pub.sections.map((x) => SECTION_TAB[x.key]).filter(Boolean);
+  return ['issue', 'sections', ...secTabs, 'users', 'comments', 'email'];
+}
+function tabLabel(k) {
+  const sec = pub.sections.find((x) => x.key === TAB_SECTION[k]);
+  return sec ? [sec.emoji, sec.title].filter(Boolean).join(' ') : TABS[k];
+}
+function goTab(k) {
+  tab = k;
+  renderTab();
+  scrollTo({ top: 0, behavior: 'smooth' });
+}
 
 function visBar() {
   const sec = pub.sections.find((x) => x.key === TAB_SECTION[tab]);
   if (!sec) return '';
-  return `<div class="vis-bar ${sec.visible ? '' : 'off'}" id="vis-bar">
+  return `<div class="sec-title-edit" id="sec-title-edit">
+    <h3>${esc([sec.emoji, sec.title].filter(Boolean).join(' '))}</h3>
+    <p class="muted small">✏️ هنا تكتب: ${esc(CONTENT_HINT[sec.key] || '')}</p>
+    <div class="row">
+      <label>عنوان القسم في الصفحة<input id="sec-title" value="${esc(sec.title)}"></label>
+      <label>العنوان الفرعي<input id="sec-subtitle" value="${esc(sec.subtitle)}"></label>
+    </div>
+    <button type="button" class="btn sm ghost" id="save-title">حفظ العنوان</button>
+  </div>
+  <div class="vis-bar ${sec.visible ? '' : 'off'}" id="vis-bar">
     <span>${sec.visible
       ? '<span class="state on">ظاهر</span> هذا القسم ظاهر للموظفين في الصفحة'
       : '<span class="state off">مخفي</span> هذا القسم مخفي عن الموظفين، ومحتواه محفوظ لين ترجّعه'}</span>
@@ -414,6 +456,7 @@ function bindVis() {
     try {
       await adminApi('/api/admin/section/sections', { method: 'PUT', body: { sections } });
       pub.sections = sections;
+      $('#sec-title-edit').remove();
       $('#vis-bar').outerHTML = visBar();
       bindVis();
       renderTabsBar();
@@ -424,6 +467,8 @@ function bindVis() {
     (s) => (s.visible ? 'رجع القسم للصفحة ✅' : 'تم إخفاء القسم، ومحتواه محفوظ ✅'));
   const size = $('#sec-size');
   if (size) size.onchange = () => saveSection({ size: size.value }, () => 'تم تغيير حجم المشاركات ✅');
+  const st = $('#save-title');
+  if (st) st.onclick = () => saveSection({ title: $('#sec-title').value, subtitle: $('#sec-subtitle').value }, () => 'تم حفظ العنوان ✅');
   const width = $('#sec-width');
   if (width) width.onchange = () => saveSection({ width: width.value }, () => 'تم تغيير عرض القسم ✅');
 }
@@ -461,7 +506,8 @@ function enableDrag(list, onReorder) {
 }
 
 function renderTabsBar() {
-  $('#tabs').innerHTML = Object.entries(TABS).map(([k, v]) => {
+  $('#tabs').innerHTML = tabOrder().map((k) => {
+    const v = tabLabel(k);
     const badge = k === 'box' ? priv.suggestions.filter((s) => !s.done).length
       : k === 'lens' ? priv.photos.filter((p) => !p.approved).length : 0;
     const sec = pub.sections.find((x) => x.key === TAB_SECTION[k]);
@@ -499,6 +545,10 @@ function renderTab() {
 $('#tabs').addEventListener('click', (e) => {
   const b = e.target.closest('[data-tab]');
   if (b) { tab = b.dataset.tab; renderTab(); }
+});
+$('#tab-body').addEventListener('click', (e) => {
+  const g = e.target.closest('[data-goto]');
+  if (g) goTab(g.dataset.goto);
 });
 
 $('#tab-body').addEventListener('click', async (e) => {

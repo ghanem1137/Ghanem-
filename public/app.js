@@ -11,6 +11,7 @@ const $ = (s, el = document) => el.querySelector(s);
 const SIZES = ['sm', 'md', 'lg', 'full'];
 const sz = (it) => (SIZES.includes(it.size) ? `sz-${it.size}` : '');
 const WIDTHS = ['quarter', 'third', 'half', 'full'];
+const ADMIN_TAB = { matches: 'matches', poll: 'poll', recs: 'recommendations', lens: 'lens', creative: 'creative', selfdev: 'selfdev', occasions: 'occasions', quiz: 'quiz', box: 'box' };
 
 // المرفقات الاختيارية: صورة و/أو مستند، وما يظهر شي إذا ما فيه مرفق
 const FILE_ICONS = { pdf: '📕', doc: '📘', docx: '📘', xls: '📗', xlsx: '📗', ppt: '📙', pptx: '📙' };
@@ -155,6 +156,13 @@ function renderSections() {
     el.hidden = !s.visible || empty;
     $('.sec-head h2', el).textContent = [s.emoji, s.title].filter(Boolean).join(' ');
     $('.sec-head p', el).textContent = s.subtitle;
+    // زر تعديل سريع للإدارة: يفتح لوحة الإدارة على محتوى هذا القسم
+    if (state.me.isAdmin && !$('.edit-sec', el)) {
+      const b = document.createElement('button');
+      b.type = 'button'; b.className = 'edit-sec'; b.textContent = '✏️ تعديل';
+      b.onclick = () => { store.set('wk-admin-tab', ADMIN_TAB[s.key]); location.href = $('#admin-link').getAttribute('href'); };
+      $('.sec-head', el).appendChild(b);
+    }
     if (!el.hidden) nav.push(`<a href="#${s.key}">${esc([s.emoji, s.nav].filter(Boolean).join(' '))}</a>`);
   }
   $('#nav').innerHTML = nav.join('');
