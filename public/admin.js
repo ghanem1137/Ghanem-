@@ -15,11 +15,77 @@ const siteUrl = () => pub.issue.siteUrl || location.origin;
 const sel = (opts) => ({ type: 'select', opts });
 // أحجام المشاركات في الصفحة
 const SIZE_LABELS = { sm: 'صغير (٤ في الصف)', md: 'متوسط (٣ في الصف)', lg: 'كبير (٢ في الصف)', full: 'عرض كامل' };
-const SINGLE_SIZE_LABELS = { sm: 'صغير', md: 'متوسط', lg: 'كبير', full: 'عرض كامل' };
 const ITEM_SIZE = ['الحجم في الصفحة', sel({ '': 'حسب حجم القسم', ...SIZE_LABELS })];
-const SINGLE_SECTIONS = ['poll', 'quiz', 'box']; // أقسام فيها بطاقة وحدة: الحجم يتحكم بعرضها
-const NO_SIZE = ['occasions'];
-const sizeOpts = (key) => (SINGLE_SECTIONS.includes(key) ? SINGLE_SIZE_LABELS : SIZE_LABELS);
+// أقسام فيها بطاقة وحدة (الاستطلاع والمسابقة والصندوق): ما لها حجم مشاركات، بس عرض القسم
+const NO_SIZE = ['poll', 'quiz', 'box'];
+const sizeOpts = () => SIZE_LABELS;
+const WIDTH_LABELS = { quarter: 'ربع الصفحة', third: 'ثلث الصفحة', half: 'نص الصفحة', full: 'الصفحة كاملة' };
+const widthSelect = (id, value) => `<select ${id}>${Object.entries(WIDTH_LABELS).map(([k, v]) => `<option value="${k}" ${k === (value || 'full') ? 'selected' : ''}>${v}</option>`).join('')}</select>`;
+
+// ---------- المرفقات الاختيارية (صورة و/أو مستند) ----------
+function attachField(it) {
+  const img = it.image || '';
+  const fileUrl = it.fileUrl || '';
+  return `<div class="attach-edit">
+    <input type="hidden" name="image" value="${esc(img)}"><input type="hidden" name="fileUrl" value="${esc(fileUrl)}"><input type="hidden" name="fileName" value="${esc(it.fileName || '')}">
+    <b class="small">📎 مرفق (اختياري)</b>
+    ${img ? `<span class="att-chip"><img src="${esc(img)}" alt=""><button type="button" class="pill" data-unattach="image">إزالة الصورة</button></span>`
+      : '<label class="pill">🖼️ إرفاق صورة<input type="file" accept="image/png,image/jpeg,image/webp,image/gif" data-up="image" hidden></label>'}
+    ${fileUrl ? `<span class="att-chip">📄 ${esc(it.fileName || 'مرفق')}<button type="button" class="pill" data-unattach="file">إزالة المستند</button></span>`
+      : '<label class="pill">📄 إرفاق مستند<input type="file" accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx" data-up="file" hidden></label>'}
+    <span class="muted small att-status"></span>
+  </div>`;
+}
+
+function fileToDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(r.result);
+    r.onerror = () => reject(new Error('ما قدرنا نقرأ الملف'));
+    r.readAsDataURL(file);
+  });
+}
+
+// الصور الكبيرة نصغّرها قبل الرفع (ما عدا GIF عشان ما تخرب الحركة)
+async function shrinkImage(file) {
+  if (file.type === 'image/gif') return { data: await fileToDataUrl(file), name: file.name };
+  const url = URL.createObjectURL(file);
+  try {
+    const img = await new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = () => rej(new Error('ما قدرنا نقرأ الصورة')); i.src = url; });
+    const k = Math.min(1, 1800 / Math.max(img.width, img.height));
+    const c = document.createElement('canvas');
+    c.width = Math.round(img.width * k); c.height = Math.round(img.height * k);
+    c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+    return { data: c.toDataURL('image/jpeg', 0.85), name: file.name.replace(/\.[^.]+$/, '') + '.jpg' };
+  } finally { URL.revokeObjectURL(url); }
+}
+
+// رفع المرفقات وإزالتها (يشتغل في محرّر المشاركات ومحرّر الأقسام)
+document.addEventListener('change', async (e) => {
+  const input = e.target.closest('input[data-up]');
+  if (!input || !input.files[0]) return;
+  const box = input.closest('.attach-edit');
+  const file = input.files[0];
+  const status = $('.att-status', box);
+  try {
+    if (file.size > 15 * 1024 * 1024) throw new Error('حجم الملف أكبر من 15 ميجا');
+    status.textContent = 'جاري الرفع…';
+    const up = input.dataset.up === 'image' ? await shrinkImage(file) : { data: await fileToDataUrl(file), name: file.name };
+    const r = await adminApi('/api/admin/upload', { method: 'POST', body: up });
+    const it = { image: $('[name=image]', box).value, fileUrl: $('[name=fileUrl]', box).value, fileName: $('[name=fileName]', box).value };
+    if (input.dataset.up === 'image') it.image = r.url; else Object.assign(it, { fileUrl: r.url, fileName: r.name });
+    box.outerHTML = attachField(it);
+    toast('تم إرفاق الملف، لا تنسى تضغط حفظ ✅');
+  } catch (err) { status.textContent = ''; toast(err.message, true); }
+});
+document.addEventListener('click', (e) => {
+  const b = e.target.closest('[data-unattach]');
+  if (!b) return;
+  const box = b.closest('.attach-edit');
+  const it = { image: $('[name=image]', box).value, fileUrl: $('[name=fileUrl]', box).value, fileName: $('[name=fileName]', box).value };
+  if (b.dataset.unattach === 'image') it.image = ''; else { it.fileUrl = ''; it.fileName = ''; }
+  box.outerHTML = attachField(it);
+});
 const LIST_SCHEMAS = {
   matches: {
     label: 'مباراة', fields: {
@@ -52,7 +118,7 @@ const LIST_SCHEMAS = {
   occasions: {
     label: 'مناسبة', fields: {
       type: ['النوع', sel(Object.fromEntries(Object.entries(LABELS.occasion).map(([k, v]) => [k, v.join(' ')])))],
-      person: ['اسم الزميل', 'text'], text: ['الرسالة', 'text'],
+      person: ['اسم الزميل', 'text'], text: ['الرسالة', 'text'], size: ITEM_SIZE,
     },
   },
 };
@@ -89,6 +155,7 @@ function listEditor(key) {
           <button type="button" class="pill" data-remove>🗑️ حذف</button>
         </div></div>
       <div class="row">${Object.entries(fields).map(([f, [l, t]]) => field(f, l, t, it[f] ?? '')).join('')}</div>
+      ${attachField(it)}
     </div>`;
   return `
     <form class="form" id="list-form">
@@ -183,9 +250,14 @@ const views = {
           ${field('emoji', 'أيقونة', 'text', s.emoji)}${field('nav', 'الاسم في القائمة', 'text', s.nav)}
           ${field('title', 'العنوان', 'text', s.title)}${field('subtitle', 'العنوان الفرعي', 'text', s.subtitle)}
         </div>
-        ${NO_SIZE.includes(s.key) ? '' : `<div class="row">${field('size', 'حجم المشاركات في هذا القسم', sel(sizeOpts(s.key)), s.size || 'md')}</div>`}
+        <div class="row">
+          ${field('width', 'عرض القسم في الصفحة', sel(WIDTH_LABELS), s.width || 'full')}
+          ${NO_SIZE.includes(s.key) ? '' : field('size', 'حجم المشاركات في هذا القسم', sel(sizeOpts(s.key)), s.size || 'md')}
+        </div>
+        ${attachField(s)}
       </div>`;
-    return `<p class="notice">✏️ غيّر عناوين الأقسام وعناوينها الفرعية متى ما تبي. رتّب أماكنها في الصفحة بسحب ⠿ أو بالأسهم.
+    return `<p class="notice">💡 أسهل طريقة لتغيير الأحجام: افتح الصفحة واضغط <b>📐 تنسيق الصفحة</b> أعلاها، وغيّر حجم أي مشاركة أو عرض أي قسم بضغطة.</p>
+      <p class="notice" style="margin-top:8px">✏️ غيّر عناوين الأقسام وعناوينها الفرعية متى ما تبي. رتّب أماكنها في الصفحة بسحب ⠿ أو بالأسهم.
       إذا ما فيه مشاركة في قسم هالأسبوع، شيل علامة "ظاهر للموظفين" ومحتواه يبقى محفوظ، وترجّعه الأسبوع الجاي بنفس الطريقة.</p>
       <form class="form" id="f-sections" style="margin-top:14px">
         <div class="editor-list">${pub.sections.map(row).join('')}</div>
@@ -325,6 +397,7 @@ function visBar() {
       ? '<span class="state on">ظاهر</span> هذا القسم ظاهر للموظفين في الصفحة'
       : '<span class="state off">مخفي</span> هذا القسم مخفي عن الموظفين، ومحتواه محفوظ لين ترجّعه'}</span>
     <span class="actions">
+      <label class="size-pick">↔️ عرض القسم ${widthSelect('id="sec-width"', sec.width)}</label>
       ${NO_SIZE.includes(sec.key) ? '' : `<label class="size-pick">📐 حجم المشاركات
         <select id="sec-size">${Object.entries(sizeOpts(sec.key)).map(([k, v]) => `<option value="${k}" ${k === (sec.size || 'md') ? 'selected' : ''}>${v}</option>`).join('')}</select></label>`}
       <button type="button" class="btn sm ${sec.visible ? 'ghost' : ''}" id="toggle-vis">${sec.visible ? '🙈 إخفاء القسم هذا الأسبوع' : '👁️ إظهار القسم'}</button>
@@ -351,6 +424,8 @@ function bindVis() {
     (s) => (s.visible ? 'رجع القسم للصفحة ✅' : 'تم إخفاء القسم، ومحتواه محفوظ ✅'));
   const size = $('#sec-size');
   if (size) size.onchange = () => saveSection({ size: size.value }, () => 'تم تغيير حجم المشاركات ✅');
+  const width = $('#sec-width');
+  if (width) width.onchange = () => saveSection({ width: width.value }, () => 'تم تغيير عرض القسم ✅');
 }
 
 // ---------- السحب والإفلات لتغيير الأماكن (والأسهم تشتغل بعد على الجوال) ----------
@@ -458,13 +533,11 @@ $('#tab-body').addEventListener('click', async (e) => {
 // ---------- الأقسام والعناوين ----------
 
 function collectSections() {
-  return [...document.querySelectorAll('#f-sections .item-editor')].map((el) => ({
-    key: el.dataset.key,
-    emoji: $('[name=emoji]', el).value, nav: $('[name=nav]', el).value,
-    title: $('[name=title]', el).value, subtitle: $('[name=subtitle]', el).value,
-    visible: $('[name=visible]', el).checked,
-    size: $('[name=size]', el)?.value || pub.sections.find((x) => x.key === el.dataset.key)?.size,
-  }));
+  return [...document.querySelectorAll('#f-sections .item-editor')].map((el) => {
+    const o = { ...pub.sections.find((x) => x.key === el.dataset.key), key: el.dataset.key };
+    el.querySelectorAll('[name]').forEach((i) => { o[i.name] = i.type === 'checkbox' ? i.checked : i.value; });
+    return o;
+  });
 }
 
 function bindSections() {

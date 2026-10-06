@@ -21,6 +21,7 @@
         <div class="userbar">
           <span id="hello"></span>
           <a href="/admin" id="admin-link" hidden>لوحة الإدارة</a>
+          <button type="button" class="link-btn" id="layout-toggle" hidden>📐 تنسيق الصفحة</button>
           <button type="button" class="link-btn" id="pw-open">كلمة المرور</button>
           <button type="button" class="link-btn" onclick="logout()">خروج</button>
         </div>
@@ -53,7 +54,7 @@
   <main class="wrap">
     <section id="occasions" class="occasions">
       <div class="sec-head"><h2></h2><p></p></div>
-      <div id="occasions-list"></div>
+      <div class="grid" id="occasions-list"></div>
     </section>
 
     <section id="matches">

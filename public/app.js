@@ -10,6 +10,42 @@ const $ = (s, el = document) => el.querySelector(s);
 // حجم المشاركة: من إعداد المشاركة نفسها، وإذا فاضي ياخذ حجم القسم
 const SIZES = ['sm', 'md', 'lg', 'full'];
 const sz = (it) => (SIZES.includes(it.size) ? `sz-${it.size}` : '');
+const WIDTHS = ['quarter', 'third', 'half', 'full'];
+
+// المرفقات الاختيارية: صورة و/أو مستند، وما يظهر شي إذا ما فيه مرفق
+const FILE_ICONS = { pdf: '📕', doc: '📘', docx: '📘', xls: '📗', xlsx: '📗', ppt: '📙', pptx: '📙' };
+function attachments(x) {
+  const img = safeUrl(x.image);
+  const file = safeUrl(x.fileUrl);
+  if (!img && !file) return '';
+  const ext = (String(x.fileName || x.fileUrl).toLowerCase().match(/\.([a-z0-9]+)$/) || [])[1] || '';
+  return `<div class="att">
+    ${img ? `<a href="${esc(img)}" target="_blank" rel="noopener" class="att-img"><img src="${esc(img)}" alt="" loading="lazy"></a>` : ''}
+    ${file ? `<a href="${esc(file)}" download="${esc(x.fileName || '')}" target="_blank" rel="noopener" class="att-file">${FILE_ICONS[ext] || '📄'} ${esc(x.fileName || 'مرفق')}<small>${esc(ext.toUpperCase())} · تحميل</small></a>` : ''}
+  </div>`;
+}
+
+// ---------- تنسيق الصفحة (للإدارة فقط): أحجام المشاركات وعرض الأقسام مباشرة من الصفحة ----------
+let layoutMode = store.get('wk-layout') === '1';
+const SIZE_NAMES = { sm: 'صغير', md: 'متوسط', lg: 'كبير', full: 'كامل' };
+const WIDTH_NAMES = { quarter: 'ربع', third: 'ثلث', half: 'نص', full: 'كامل' };
+function sizeTools(sec, item) {
+  if (!layoutMode || !state.me.isAdmin) return '';
+  const current = SIZES.includes(item.size) ? item.size : '';
+  return `<div class="lay-tools" title="حجم هذي المشاركة">📐
+    ${SIZES.map((k) => `<button type="button" class="${current === k ? 'on' : ''}" data-act="lay" data-sec="${sec}" data-id="${esc(item.id)}" data-size="${k}">${SIZE_NAMES[k]}</button>`).join('')}
+    <button type="button" class="${current ? '' : 'on'}" data-act="lay" data-sec="${sec}" data-id="${esc(item.id)}" data-size="" title="ياخذ حجم القسم">تلقائي</button>
+  </div>`;
+}
+function sectionTools(s) {
+  const list = ['matches', 'recs', 'creative', 'selfdev', 'occasions', 'lens'].includes(s.key);
+  return `<div class="lay-tools sec-tools">
+    <span>↔️ عرض القسم:</span>
+    ${WIDTHS.map((k) => `<button type="button" class="${s.width === k ? 'on' : ''}" data-act="lay" data-sec="${s.key}" data-width="${k}">${WIDTH_NAMES[k]}</button>`).join('')}
+    ${list ? `<span>· 📐 حجم المشاركات:</span>
+    ${SIZES.map((k) => `<button type="button" class="${s.size === k ? 'on' : ''}" data-act="lay" data-sec="${s.key}" data-size="${k}">${SIZE_NAMES[k]}</button>`).join('')}` : ''}
+  </div>`;
+}
 
 // ---------- التفاعل: إعجاب + تعليقات ----------
 
@@ -48,6 +84,15 @@ document.addEventListener('click', async (e) => {
       if (openComments.has(target)) $(`[data-draft="${CSS.escape(target)}"]`)?.focus();
     }
     if (act === 'vote') { await api('/api/poll/vote', { method: 'POST', body: { choice: btn.dataset.choice } }); toast('تم تسجيل توقعك 👌'); await refresh(); }
+    if (act === 'lay') {
+      const d = btn.dataset;
+      const body = { section: d.sec };
+      if (d.id) Object.assign(body, { itemId: d.id, size: d.size });
+      else if (d.width) body.width = d.width;
+      else body.size = d.size;
+      await api('/api/admin/layout', { method: 'POST', body });
+      await refresh();
+    }
     if (act === 'expand') { btn.closest('.creative-item').classList.toggle('expanded'); }
     if (act === 'del-comment' && confirm('تحذف التعليق؟')) { await api(`/api/comments/${btn.dataset.id}`, { method: 'DELETE' }); await refresh(); }
   } catch (err) { toast(err.message, true); }
@@ -85,6 +130,10 @@ function renderIssue() {
   $('#issue-footer').textContent = i.footer || '';
   $('#hello').textContent = `هلا ${state.me.name} 👋`;
   $('#admin-link').hidden = !state.me.isAdmin;
+  const lt = $('#layout-toggle');
+  lt.hidden = !state.me.isAdmin;
+  lt.textContent = layoutMode ? '✅ إنهاء التنسيق' : '📐 تنسيق الصفحة';
+  document.body.classList.toggle('layout-mode', layoutMode && state.me.isAdmin);
 }
 
 // عناوين الأقسام وترتيبها وإظهارها من إعدادات الإدارة
@@ -97,6 +146,11 @@ function renderSections() {
     main.appendChild(el);
     el.dataset.acc = String(state.sections.indexOf(s) % 6);
     el.dataset.size = SIZES.includes(s.size) ? s.size : 'md';
+    el.dataset.width = WIDTHS.includes(s.width) ? s.width : 'full';
+    // مرفق القسم وأدوات التنسيق تحت العنوان
+    let extra = $('.sec-extra', el);
+    if (!extra) { extra = document.createElement('div'); extra.className = 'sec-extra'; $('.sec-head', el).after(extra); }
+    extra.innerHTML = (layoutMode && state.me.isAdmin ? sectionTools(s) : '') + attachments(s);
     const empty = s.key === 'occasions' && !state.occasions.length;
     el.hidden = !s.visible || empty;
     $('.sec-head h2', el).textContent = [s.emoji, s.title].filter(Boolean).join(' ');
@@ -110,16 +164,17 @@ function renderOccasions() {
   const list = state.occasions;
   $('#occasions-list').innerHTML = list.map((o) => {
     const [ic, t] = label('occasion', o.type);
-    return `<div class="occasion"><span class="oc-ic">${ic}</span><div><b>${esc(t)} ${esc(o.person)}</b><p>${esc(o.text)}</p></div></div>`;
+    return `<div class="occasion ${sz(o)}">${sizeTools('occasions', o)}<div class="oc-row"><span class="oc-ic">${ic}</span><div><b>${esc(t)} ${esc(o.person)}</b><p>${esc(o.text)}</p></div></div>${attachments(o)}</div>`;
   }).join('');
 }
 
 function renderMatches() {
   $('#matches-list').innerHTML = state.matches.map((m) => `
-    <article class="card match ${sz(m)}">
+    <article class="card match ${sz(m)}">${sizeTools('matches', m)}
       <div class="match-top"><span class="league">${esc(m.league)}</span><span class="day">${esc(m.day)} · ${esc(m.time)}</span></div>
       <div class="teams"><span>${esc(m.home)}</span><span class="vs">VS</span><span>${esc(m.away)}</span></div>
       <div class="match-meta">${m.stadium ? `🏟️ ${esc(m.stadium)}` : ''} ${m.channel ? `<span>📺 ${esc(m.channel)}</span>` : ''}</div>
+      ${attachments(m)}
       ${interact(m.id)}
     </article>`).join('') || '<p class="card empty">⚽ مباريات الويكند تنزل قريب… جهّز القهوة!</p>';
 }
@@ -163,7 +218,7 @@ function renderRecs() {
     const link = safeUrl(r.link);
     const isBook = r.category === 'book';
     return `
-    <article class="card rec cat-${esc(r.category)} ${sz(r)}">
+    <article class="card rec cat-${esc(r.category)} ${sz(r)}">${sizeTools('recs', r)}
       <div class="rec-head"><span class="rec-ic">${ic}</span><div>
         <span class="tag">${esc(cat)}</span>
         <h3>${esc(r.title || cat)} ${isBook ? 'ينصح فيه' : 'برأي'} زميلنا <span class="who">${esc(r.colleague)}</span></h3>
@@ -174,6 +229,7 @@ function renderRecs() {
       ${link ? `<div class="rec-link">
         <a class="btn sm" href="${esc(link)}" target="_blank" rel="noopener">${isBook ? '📥 تحميل / قراءة الكتاب' : '🔗 الرابط'}</a>
         ${isBook ? `<div class="qr" data-qr="${esc(link)}" title="امسح الكود من جوالك"></div>` : ''}</div>` : ''}
+      ${attachments(r)}
       ${interact(r.id)}
     </article>`;
   }).join('') || '<p class="card empty">💡 ما فيه توصيات للحين، كن أول من يشاركنا وحدة من الصندوق تحت 👇</p>';
@@ -203,7 +259,7 @@ function renderCreative() {
     const link = safeUrl(c.link);
     const long = c.body.length > 280;
     return `
-    <article class="card creative-item type-${esc(c.type)} ${sz(c)}">
+    <article class="card creative-item type-${esc(c.type)} ${sz(c)}">${sizeTools('creative', c)}
       <div class="rec-head"><span class="rec-ic">${ic}</span><div>
         <span class="tag">${esc(t)}</span>
         <h3>${esc(c.title)}</h3>
@@ -212,6 +268,7 @@ function renderCreative() {
       ${c.body ? `<div class="body ${c.type === 'poem' ? 'poem' : ''} ${long ? 'clamp' : ''}">${esc(c.body)}</div>` : ''}
       ${long ? '<button class="link-btn" data-act="expand">اقرأ أكثر / أقل</button>' : ''}
       ${link ? `<a class="btn sm" href="${esc(link)}" target="_blank" rel="noopener">${c.type === 'podcast' ? '🎧 استمع' : '🔗 افتح'}</a>` : ''}
+      ${attachments(c)}
       ${interact(c.id)}
     </article>`;
   }).join('') || '<p class="card empty">✍️ عندك مقالة أو بودكاست أو قصيدة؟ أرسلها لنا من الصندوق تحت</p>';
@@ -221,11 +278,12 @@ function renderSelfdev() {
   $('#selfdev-list').innerHTML = state.selfdev.map((s) => {
     const link = safeUrl(s.link);
     return `
-    <article class="card selfdev ${sz(s)}">
+    <article class="card selfdev ${sz(s)}">${sizeTools('selfdev', s)}
       <h3>🌱 ${esc(s.title)}</h3>
       <p>${esc(s.summary)}</p>
       <p class="muted small">${s.source ? `✍️ ${esc(s.source)}` : ''} ${s.readMinutes ? ` · ⏱️ ${esc(s.readMinutes)} دقائق قراءة` : ''}</p>
       ${link ? `<a class="btn sm ghost" href="${esc(link)}" target="_blank" rel="noopener">كمّل القراءة</a>` : ''}
+      ${attachments(s)}
       ${interact(s.id)}
     </article>`;
   }).join('') || '<p class="card empty">🌱 قريباً… وإذا عندك مقالة نفعتك شاركنا فيها من الصندوق تحت</p>';
@@ -431,6 +489,13 @@ async function loadWeather() {
   } catch { hide(); }
 }
 setInterval(() => { if (state) loadWeather(); }, 30 * 6e4);
+
+$('#layout-toggle').onclick = () => {
+  layoutMode = !layoutMode;
+  store.set('wk-layout', layoutMode ? '1' : '0');
+  render();
+  if (layoutMode) toast('اضغط على الأحجام فوق كل مشاركة وتحت عنوان كل قسم، والتغيير ينحفظ على طول');
+};
 
 // ---------- تغيير كلمة المرور ----------
 

@@ -72,8 +72,8 @@ p { margin: .3em 0; }
 .hero-bar { display: flex; justify-content: space-between; align-items: center; gap: 12px 24px; flex-wrap: wrap; }
 .brand { display: flex; align-items: center; gap: 12px; }
 .logo-plate { background: #fff; border-radius: 8px; padding: 4px 10px; display: inline-flex; }
-.logo-plate img { height: 78px; width: auto; }
-@media (max-width: 560px) { .logo-plate img { height: 60px; } }
+.logo-plate img { height: 96px; width: auto; }
+@media (max-width: 560px) { .logo-plate img { height: 70px; } }
 .brand b { display: block; font-size: 1rem; font-weight: 700; }
 .brand span { display: block; font-size: .68rem; letter-spacing: .06em; opacity: .85; direction: ltr; text-align: right; }
 .userbar { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; font-size: .9rem; }
@@ -133,34 +133,64 @@ main section[data-acc="5"] { --acc: var(--c-maroon); }
 
 .card { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 18px; box-shadow: var(--shadow); }
 .match, .rec, .creative-item, .selfdev, .poll, .quiz, .occasion, .featured, .shot { border-inline-start: 4px solid var(--acc); }
-.grid { display: grid; gap: 14px; grid-template-columns: repeat(12, minmax(0, 1fr)); }
 .grid > *, .stack > * { min-width: 0; }
 
-/* ---------- أحجام المشاركات ----------
-   حجم القسم (data-size) هو الافتراضي، وحجم المشاركة نفسها (sz-*) يغلبه:
-   صغير = ٤ في الصف، متوسط = ٣، كبير = ٢، عرض كامل = ١ */
-.grid > * { grid-column: span 4; }
-section[data-size="sm"] .grid > * { grid-column: span 3; }
-section[data-size="md"] .grid > * { grid-column: span 4; }
-section[data-size="lg"] .grid > * { grid-column: span 6; }
-section[data-size="full"] .grid > * { grid-column: span 12; }
-.grid > .card.sz-sm { grid-column: span 3; }
-.grid > .card.sz-md { grid-column: span 4; }
-.grid > .card.sz-lg { grid-column: span 6; }
-.grid > .card.sz-full { grid-column: span 12; }
-.grid > .card.empty, .grid > .empty { grid-column: 1 / -1; }
-/* الأقسام اللي فيها بطاقة وحدة (الاستطلاع والمسابقة والصندوق): الحجم يتحكم بعرضها */
-section[data-size="sm"] .single { max-width: 420px; }
-section[data-size="md"] .single { max-width: 620px; }
-section[data-size="lg"] .single { max-width: 860px; }
-@media (max-width: 900px) {
-  main section[data-size] .grid > *, .grid > .card[class*="sz-"] { grid-column: span 6; }
-  main section[data-size="full"] .grid > *, .grid > .card.sz-lg, .grid > .card.sz-full { grid-column: span 12; }
+/* ---------- تخطيط الصفحة بدون فراغات ----------
+   الأقسام تصطف جنب بعض حسب عرضها (ربع/ثلث/نص/كامل) وتتمدد لين تعبّي الصف.
+   والمشاركات داخل القسم كذلك: كل وحدة لها حجم أساسي، وتتمدد عشان ما يبقى فراغ في آخر الصف. */
+main.wrap { display: flex; flex-wrap: wrap; align-items: stretch; column-gap: 20px; }
+main > section { flex: 1 1 100%; min-width: 0; display: flex; flex-direction: column; }
+main > section[data-width="quarter"] { flex-basis: max(250px, calc(25% - 15px)); }
+main > section[data-width="third"] { flex-basis: max(280px, calc(33.333% - 14px)); }
+main > section[data-width="half"] { flex-basis: max(320px, calc(50% - 10px)); }
+main > section > .grid, main > section > .single, main > section > .stack { flex: 1 1 auto; }
+
+.grid { display: flex; flex-wrap: wrap; gap: 14px; align-content: stretch; }
+.grid > * { flex: 1 1 max(240px, calc(33.333% - 10px)); }
+section[data-size="sm"] .grid > * { flex-basis: max(190px, calc(25% - 11px)); }
+section[data-size="md"] .grid > * { flex-basis: max(240px, calc(33.333% - 10px)); }
+section[data-size="lg"] .grid > * { flex-basis: max(280px, calc(50% - 7px)); }
+section[data-size="full"] .grid > * { flex-basis: 100%; }
+/* حجم المشاركة نفسها يغلب حجم القسم */
+.grid > .sz-sm.sz-sm { flex-basis: max(190px, calc(25% - 11px)); }
+.grid > .sz-md.sz-md { flex-basis: max(240px, calc(33.333% - 10px)); }
+.grid > .sz-lg.sz-lg { flex-basis: max(280px, calc(50% - 7px)); }
+.grid > .sz-full.sz-full { flex-basis: 100%; }
+.grid > .empty.empty { flex-basis: 100%; }
+@media (max-width: 760px) {
+  main > section[data-width] { flex-basis: 100%; }
 }
 @media (max-width: 560px) {
-  main section[data-size] .grid > *, .grid > .card[class*="sz-"] { grid-column: span 12; }
-  main section[data-size] .single { max-width: none; }
+  .grid > *, .grid > [class*="sz-"][class*="sz-"] { flex-basis: 100% !important; }
 }
+
+/* ---------- المرفقات ---------- */
+.att { display: grid; gap: 8px; }
+.att-img { display: block; border-radius: 8px; overflow: hidden; border: 1px solid var(--line); }
+.att-img img { width: 100%; max-height: 320px; object-fit: cover; }
+.att-file {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap; text-decoration: none; color: var(--ink);
+  background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; font-weight: 600; font-size: .92rem;
+  overflow-wrap: anywhere;
+}
+.att-file small { color: var(--muted); font-weight: 400; margin-inline-start: auto; }
+.att-file:hover { border-color: var(--acc, var(--c-teal)); }
+.sec-extra { display: grid; gap: 10px; margin-bottom: 12px; }
+.sec-extra:empty { display: none; }
+.sec-extra .att-img img { max-height: 380px; }
+
+/* ---------- وضع تنسيق الصفحة (للإدارة) ---------- */
+.lay-tools { display: none; }
+.layout-mode .lay-tools {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 4px; font-size: .78rem; color: var(--muted);
+  background: var(--sea-soft); border: 1px dashed var(--c-blue); border-radius: 6px; padding: 4px 6px;
+}
+.layout-mode .lay-tools button {
+  font: inherit; border: 1px solid var(--line); background: var(--card); color: var(--ink); border-radius: 4px; padding: 0 8px; cursor: pointer;
+}
+.layout-mode .lay-tools button.on { background: var(--head); color: #fff; border-color: var(--head); }
+.layout-mode main > section { outline: 1px dashed var(--c-blue); outline-offset: 6px; border-radius: 4px; }
+.layout-mode .grid > * { outline: 1px dashed rgba(62, 149, 207, .5); }
 .stack { display: grid; gap: 14px; }
 .empty { text-align: center; color: var(--muted); padding: 34px 16px; margin: 0; }
 
@@ -168,11 +198,11 @@ section[data-size="lg"] .single { max-width: 860px; }
 .tag.gold { background: var(--sun-soft); color: var(--gold); }
 
 /* المناسبات */
-#occasions-list { display: flex; gap: 12px; overflow-x: auto; padding-bottom: 4px; }
 .occasion {
-  flex: 0 0 auto; display: flex; gap: 10px; align-items: center; background: var(--card); border: 1px solid var(--line);
-  border-inline-start: 4px solid var(--acc); border-radius: var(--radius); padding: 10px 16px; max-width: 360px; box-shadow: var(--shadow);
+  display: flex; flex-direction: column; gap: 8px; background: var(--card); border: 1px solid var(--line);
+  border-inline-start: 4px solid var(--acc); border-radius: var(--radius); padding: 10px 16px; box-shadow: var(--shadow);
 }
+.oc-row { display: flex; gap: 10px; align-items: center; }
 .oc-ic { font-size: 1.7rem; }
 .occasion p { margin: 0; font-size: .9rem; }
 
@@ -303,7 +333,7 @@ body.loading main, body.loading .chips, body.loading .stats { visibility: hidden
 .login-page main { flex: 1; display: grid; place-items: center; padding: 24px 16px; }
 .login-page .login { margin: 0; width: 100%; max-width: 400px; }
 .login-head { text-align: center; display: grid; gap: 4px; justify-items: center; }
-.login-head img { height: 96px; width: auto; }
+.login-head img { height: 112px; width: auto; }
 .login-head .org { font-size: .85rem; color: var(--muted); }
 .login-head h1 { font-size: 1.8rem; font-weight: 700; }
 .login { max-width: 380px; margin: 80px auto; }
@@ -352,3 +382,7 @@ dialog::backdrop { background: rgba(0, 0, 0, .4); }
 .notice { background: var(--sea-soft); border-radius: 8px; padding: 10px 14px; }
 .email-preview { border: 1px solid var(--line); border-radius: 8px; background: #fff; max-height: 600px; overflow: auto; }
 .table-wrap { overflow-x: auto; }
+.attach-edit { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; border-top: 1px dashed var(--line); padding-top: 10px; }
+.attach-edit label.pill { display: inline-flex !important; }
+.att-chip { display: inline-flex; align-items: center; gap: 8px; background: var(--card); border: 1px solid var(--line); border-radius: 6px; padding: 4px 8px; font-size: .88rem; }
+.att-chip img { height: 40px; width: auto; border-radius: 4px; }

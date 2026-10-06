@@ -28,6 +28,11 @@ const str = (v, max = 500) => String(v ?? '').trim().slice(0, max);
 // أحجام المشاركات: صغير (٤ في الصف)، متوسط (٣)، كبير (٢)، عرض كامل
 const SIZES = ['sm', 'md', 'lg', 'full'];
 const DEFAULT_SIZES = { occasions: 'md', matches: 'sm', poll: 'full', recs: 'md', lens: 'sm', creative: 'full', selfdev: 'md', quiz: 'full', box: 'full' };
+// عرض القسم في الصفحة: ربع، ثلث، نص، أو كامل. الأقسام تصطف جنب بعض وتتمدد لين تعبّي الصف بدون فراغات
+const WIDTHS = ['quarter', 'third', 'half', 'full'];
+const DEFAULT_WIDTHS = { occasions: 'full', matches: 'full', poll: 'half', recs: 'full', lens: 'full', creative: 'half', selfdev: 'half', quiz: 'half', box: 'full' };
+// مفتاح القسم ← مكان مشاركاته في البيانات
+const SECTION_LIST = { matches: 'matches', recs: 'recommendations', creative: 'creative', selfdev: 'selfdev', occasions: 'occasions' };
 
 // ترتيب الأقسام وعناوينها الافتراضية (الإدارة تقدر تعدّلها كلها)
 const DEFAULT_SECTIONS = [
@@ -40,7 +45,9 @@ const DEFAULT_SECTIONS = [
   ['selfdev', '🌱', 'طوّر نفسك على رواق', 'قراءات قصيرة تنفعك بدون ما تثقل عليك', 'طوّر نفسك'],
   ['quiz', '🧩', 'مسابقة الويكند السريعة', 'سؤال خفيف، وجاوب صح وادخل السحب', 'المسابقة'],
   ['box', '📮', 'صندوق المشاركات والاقتراحات', 'عندك توصية، مقالة، قصيدة، فكرة للعدد الجاي، أو ملاحظة؟ هذا مكانها', 'شاركنا'],
-].map(([key, emoji, title, subtitle, nav]) => ({ key, emoji, title, subtitle, nav, visible: true, size: DEFAULT_SIZES[key] }));
+].map(([key, emoji, title, subtitle, nav]) => ({
+  key, emoji, title, subtitle, nav, visible: true, size: DEFAULT_SIZES[key], width: DEFAULT_WIDTHS[key], image: '', fileUrl: '', fileName: '',
+}));
 const SECTION_KEYS = DEFAULT_SECTIONS.map((s) => s.key);
 
 function seed() {
@@ -292,6 +299,8 @@ function normalizeSections(list) {
       key: s.key, emoji: str(s.emoji, 8), title: str(s.title, 120) || d.title,
       subtitle: str(s.subtitle, 300), nav: str(s.nav, 40) || d.nav, visible: s.visible !== false,
       size: SIZES.includes(s.size) ? s.size : d.size,
+      width: WIDTHS.includes(s.width) ? s.width : d.width,
+      ...cleanAttach(s),
     });
   }
   for (const d of DEFAULT_SECTIONS) if (!out.some((x) => x.key === d.key)) out.push({ ...d });
@@ -339,6 +348,33 @@ function saveImage(dataUrl) {
   return `/uploads/${name}`;
 }
 
+// رفع مرفق (صورة أو مستند) مع التحقق من نوعه الحقيقي من أول بايتات الملف
+const ATTACH_TYPES = {
+  png: 'image', jpg: 'image', jpeg: 'image', webp: 'image', gif: 'image',
+  pdf: 'file', docx: 'file', xlsx: 'file', pptx: 'file', doc: 'file', xls: 'file', ppt: 'file',
+};
+function saveAttachment(dataUrl, name) {
+  const m = /^data:[^;,]*;base64,(.+)$/.exec(dataUrl || '');
+  const ext = (String(name || '').toLowerCase().match(/\.([a-z0-9]{2,5})$/) || [])[1];
+  if (!m || !ATTACH_TYPES[ext]) throw Object.assign(new Error('الملف لازم يكون صورة (JPG/PNG/WEBP/GIF) أو مستند (PDF/Word/Excel/PowerPoint)'), { status: 400 });
+  const buf = Buffer.from(m[1], 'base64');
+  const sig = buf.subarray(0, 12);
+  const ok = {
+    png: () => sig[0] === 0x89 && sig[1] === 0x50,
+    jpg: () => sig[0] === 0xff && sig[1] === 0xd8,
+    webp: () => sig.toString('ascii', 0, 4) === 'RIFF' && sig.toString('ascii', 8, 12) === 'WEBP',
+    gif: () => sig.toString('ascii', 0, 3) === 'GIF',
+    pdf: () => sig.toString('ascii', 0, 4) === '%PDF',
+    zip: () => sig[0] === 0x50 && sig[1] === 0x4b, // docx/xlsx/pptx
+    ole: () => sig.readUInt32BE(0) === 0xd0cf11e0, // doc/xls/ppt القديمة
+  };
+  const check = { jpeg: 'jpg', docx: 'zip', xlsx: 'zip', pptx: 'zip', doc: 'ole', xls: 'ole', ppt: 'ole' }[ext] || ext;
+  if (!ok[check]()) throw Object.assign(new Error('محتوى الملف ما يطابق نوعه'), { status: 400 });
+  const file = `${crypto.randomBytes(12).toString('hex')}.${ext === 'jpeg' ? 'jpg' : ext}`;
+  fs.writeFileSync(path.join(UPLOAD_DIR, file), buf);
+  return { url: `/uploads/${file}`, name: str(name, 120), kind: ATTACH_TYPES[ext] };
+}
+
 function deleteImage(url) {
   const file = path.join(UPLOAD_DIR, path.basename(url || ''));
   fs.rm(file, { force: true }, () => {});
@@ -351,14 +387,21 @@ const LIST_SECTIONS = {
   recommendations: ['category', 'title', 'colleague', 'itemName', 'description', 'location', 'link', 'size'],
   creative: ['type', 'title', 'author', 'body', 'link', 'size'],
   selfdev: ['title', 'summary', 'source', 'link', 'readMinutes', 'size'],
-  occasions: ['type', 'person', 'text'],
+  occasions: ['type', 'person', 'text', 'size'],
 };
+
+// المرفقات الاختيارية (صورة و/أو مستند): نقبل فقط ملفات مرفوعة على المنصة
+function cleanAttach(x) {
+  const up = (u) => (/^\/uploads\/[a-f0-9]{24}\.[a-z0-9]{2,5}$/.test(String(u || '')) ? u : '');
+  const fileUrl = up(x.fileUrl);
+  return { image: up(x.image), fileUrl, fileName: fileUrl ? str(x.fileName, 120) || 'مرفق' : '' };
+}
 
 function cleanItem(fields, item) {
   const out = { id: /^[a-f0-9]{12}$/.test(item.id) ? item.id : id() };
   for (const f of fields) out[f] = str(item[f], f === 'body' || f === 'summary' || f === 'description' ? 5000 : 300);
   if ('size' in out && !SIZES.includes(out.size)) out.size = ''; // فاضي = حسب إعداد القسم
-  return out;
+  return { ...out, ...cleanAttach(item) };
 }
 
 // ---------- المسارات ----------
@@ -414,7 +457,8 @@ async function api(req, res, url) {
   if (m === 'GET' && p === '/api/state') return send(res, 200, publicState(user));
   if (m === 'GET' && p === '/api/weather') return send(res, 200, { weather: await getWeather() });
 
-  const body = await readBody(req, p === '/api/photos' || p === '/api/admin/logo' ? 8 * 1024 * 1024 : 512 * 1024);
+  const big = { '/api/photos': 8, '/api/admin/logo': 8, '/api/admin/upload': 22 }[p];
+  const body = await readBody(req, (big || 0.5) * 1024 * 1024);
 
   if (m === 'POST' && p === '/api/me/password') {
     need(checkPassword(String(body.current || ''), user.pass), 'كلمة المرور الحالية غير صحيحة');
@@ -543,6 +587,27 @@ async function api(req, res, url) {
       return send(res, 200, { ok: true });
     }
 
+    if (m === 'POST' && p === '/api/admin/upload') {
+      return send(res, 200, saveAttachment(body.data, body.name));
+    }
+
+    // تغيير الحجم مباشرة من الصفحة: عرض القسم، أو حجم مشاركة وحدة
+    if (m === 'POST' && p === '/api/admin/layout') {
+      const sec = db.sections.find((x) => x.key === body.section);
+      need(sec, 'القسم غير موجود');
+      if (body.itemId) {
+        const item = (db[SECTION_LIST[sec.key]] || []).find((x) => x.id === body.itemId);
+        need(item, 'المشاركة غير موجودة');
+        need(body.size === '' || SIZES.includes(body.size), 'حجم غير صالح');
+        item.size = body.size;
+      } else {
+        if (body.width !== undefined) { need(WIDTHS.includes(body.width), 'عرض غير صالح'); sec.width = body.width; }
+        if (body.size !== undefined) { need(SIZES.includes(body.size), 'حجم غير صالح'); sec.size = body.size; }
+      }
+      save(); broadcast();
+      return send(res, 200, { ok: true });
+    }
+
     if (m === 'POST' && p === '/api/admin/logo') {
       const old = db.issue.logo;
       db.issue.logo = body.reset ? '/logo.png' : body.image ? saveImage(body.image) : '';
@@ -649,6 +714,11 @@ async function api(req, res, url) {
 const MIME = {
   '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8',
   '.png': 'image/png', '.jpg': 'image/jpeg', '.webp': 'image/webp', '.svg': 'image/svg+xml', '.ico': 'image/x-icon',
+  '.gif': 'image/gif', '.pdf': 'application/pdf',
+  '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  '.pptx': 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  '.doc': 'application/msword', '.xls': 'application/vnd.ms-excel', '.ppt': 'application/vnd.ms-powerpoint',
 };
 
 function serveStatic(req, res, url) {
@@ -657,9 +727,11 @@ function serveStatic(req, res, url) {
   let root = PUBLIC_DIR;
   if (rel.startsWith('/uploads/')) {
     // الصور المعتمدة تظهر حتى في نسخة الإيميل، واللي تحت المراجعة للإدارة فقط
+    // والمرفقات للموظفين اللي داخلين، وصور عدسة الموظف اللي ما انعتمدت للإدارة فقط
     const photo = db.photos.find((x) => x.url === rel);
-    const visible = rel === db.issue.logo || (photo && (photo.approved || photo.id === db.featuredPhotoId));
-    if (!visible && !currentUser(req)?.isAdmin) { res.writeHead(404); return res.end(); }
+    const viewer = currentUser(req);
+    const visible = rel === db.issue.logo || (photo && (photo.approved || photo.id === db.featuredPhotoId)) || (!photo && viewer);
+    if (!visible && !viewer?.isAdmin) { res.writeHead(404); return res.end(); }
     root = UPLOAD_DIR;
     rel = rel.slice('/uploads'.length);
   }
