@@ -477,6 +477,8 @@ dialog::backdrop { background: rgba(0, 0, 0, .4); }
 .dist-legend a { color: var(--ink); text-decoration: none; display: inline-flex; align-items: center; gap: 6px; }
 .dist-legend i { width: 10px; height: 10px; border-radius: 3px; background: var(--acc); }
 .dist-legend b { color: var(--muted); font-weight: 600; }
+.roles-legend { display: grid; gap: 8px; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); margin-top: 14px; }
+.roles-legend > div { display: grid; gap: 2px; background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; }
 
 /* لما يكون الملف مفتوح من خادم المنصة، البيانات مشتركة فما نحتاج تنبيهات الوضع المحلي */
 [data-mode="server"] .local-only { display: none !important; }
@@ -584,6 +586,7 @@ dialog::backdrop { background: rgba(0, 0, 0, .4); }
 
     <section id="box">
       <div class="sec-head"><div class="sec-title"><span class="sec-ic"></span><h2></h2><span class="sec-count"></span><i class="sec-line"></i></div><p></p></div>
+      <p class="card empty" id="ro-note" hidden>👀 حسابك للاطلاع فقط، فما تقدر ترسل مشاركات. تواصل مع فريق النشرة لو تبي صلاحية المشاركة.</p>
       <form id="suggest-form" class="card form single">
         <div class="row">
           <label>نوع المشاركة
@@ -2989,6 +2992,22 @@ var qrcode = function() {
   const WEATHER_API = 'https://api.open-meteo.com';
   const GEO_API = 'https://geocoding-api.open-meteo.com';
 
+  // الأدوار والصلاحيات (نفس تعريف server.js)
+  const ROLES = {
+    admin: ['view', 'participate', 'moderate', 'content', 'users', 'settings'],
+    editor: ['view', 'participate', 'moderate', 'content'],
+    moderator: ['view', 'participate', 'moderate'],
+    employee: ['view', 'participate'],
+    viewer: ['view'],
+  };
+  const can = (user, perm) => !!user && (ROLES[user.role] || []).includes(perm);
+  const AKEY = 'weekend-saeed-audit';
+  function audit(user, action, details = '') {
+    let log = [];
+    try { log = JSON.parse(localStorage.getItem(AKEY)) || []; } catch { /* تجاهل */ }
+    log.unshift({ at: new Date().toISOString(), user_id: user?.id, user_name: user?.name || '', role: user?.role || '', action, details: String(details).slice(0, 500) });
+    try { localStorage.setItem(AKEY, JSON.stringify(log.slice(0, 400))); } catch { /* تجاهل */ }
+  }
   const rid = () => Array.from(crypto.getRandomValues(new Uint8Array(6)), (b) => b.toString(16).padStart(2, '0')).join('');
   const now = () => new Date().toISOString();
   const str = (v, max = 500) => String(v ?? '').trim().slice(0, max);
@@ -3061,7 +3080,7 @@ var qrcode = function() {
       recommendations: [], creative: [], selfdev: [], occasions: [],
       quiz: { id: rid(), question: '', hint: '', accepted: [], prize: '', closed: false, winner: null, answers: [] },
       photos: [], featuredPhotoId: null, likes: {}, comments: [], suggestions: [],
-      users: [{ id: rid(), name: 'مدير النشرة', email: '', username: 'admin', pass: await hashPassword('weekend123'), isAdmin: true, createdAt: now() }],
+      users: [{ id: rid(), name: 'مدير النشرة', email: '', username: 'admin', pass: await hashPassword('weekend123'), role: 'admin', createdAt: now() }],
     };
   }
 
@@ -3071,6 +3090,7 @@ var qrcode = function() {
     try { db = JSON.parse(ls.get(KEY)); } catch { db = null; }
     if (!db) { db = await seed(); persist(); }
     db.sections = normalizeSections(db.sections);
+    for (const u of db.users) { if (!ROLES[u.role]) u.role = u.isAdmin ? 'admin' : 'employee'; delete u.isAdmin; }
     if (!db.issue.logo && !db.issue.logoRemoved) db.issue.logo = DEFAULT_LOGO;
   }
   function persist() {
@@ -3100,7 +3120,8 @@ var qrcode = function() {
   const need = (c, msg, status = 400) => { if (!c) throw err(status, msg); };
   const normalizeArabic = (s) => str(s, 200).replace(/[ً-ْـ]/g, '').replace(/[أإآ]/g, 'ا').replace(/ة/g, 'ه').replace(/ى/g, 'ي').replace(/\s+/g, ' ').toLowerCase();
   const EMAIL_RE = /^[^\s@,;<>"']+@[^\s@,;<>"']+\.[^\s@,;<>"']+$/;
-  const publicUser = (u) => ({ id: u.id, name: u.name, email: u.email, username: u.username, isAdmin: !!u.isAdmin, createdAt: u.createdAt, lastLogin: u.lastLogin || null });
+  const publicUser = (u) => ({ id: u.id, name: u.name, email: u.email, username: u.username, role: u.role, createdAt: u.createdAt, lastLogin: u.lastLogin || null });
+  const admins = () => db.users.filter((u) => u.role === 'admin');
   const LIST = {
     matches: ['league', 'home', 'away', 'day', 'time', 'channel', 'stadium', 'size'],
     recommendations: ['category', 'title', 'colleague', 'itemName', 'description', 'location', 'link', 'size'],
@@ -3167,7 +3188,7 @@ var qrcode = function() {
     for (const [t, arr] of Object.entries(db.likes)) likes[t] = { count: arr.length, mine: arr.includes(user.id) };
     const { accepted, answers, ...quiz } = db.quiz;
     return {
-      me: { id: user.id, name: user.name, username: user.username, isAdmin: !!user.isAdmin },
+      me: { id: user.id, name: user.name, username: user.username, role: user.role, perms: ROLES[user.role] || [], isAdmin: user.role === 'admin' },
       issue: db.issue, sections: db.sections, weatherCity: db.weather.enabled ? db.weather.city : null,
       matches: db.matches, poll: { ...db.poll, votes: undefined, counts, myVote: db.poll.votes[user.id] || null },
       recommendations: db.recommendations, creative: db.creative, selfdev: db.selfdev, occasions: db.occasions,
@@ -3186,7 +3207,8 @@ var qrcode = function() {
       const u = db.users.find((x) => x.username === login || (x.email && x.email.toLowerCase() === login));
       need(u && await checkPassword(String(body.password || ''), u.pass), 'اسم المستخدم أو كلمة المرور غير صحيحة', 401);
       u.lastLogin = now(); save(); ls.set(SKEY, u.id);
-      return { ok: true, isAdmin: !!u.isAdmin };
+      audit(u, 'دخول');
+      return { ok: true, role: u.role };
     }
     if (m === 'POST' && p === '/api/logout') { ls.del(SKEY); return { ok: true }; }
     if (m === 'GET' && p === '/api/brand') { const { title, orgName, orgNameEn, logo } = db.issue; return { title, orgName, orgNameEn, logo }; }
@@ -3196,6 +3218,8 @@ var qrcode = function() {
 
     if (m === 'GET' && p === '/api/state') return publicState(user);
     if (m === 'GET' && p === '/api/weather') return { weather: await getWeather() };
+    const PARTICIPATE = ['/api/poll/vote', '/api/like', '/api/comments', '/api/quiz/answer', '/api/photos', '/api/suggestions'];
+    if (m === 'POST' && PARTICIPATE.includes(p)) need(can(user, 'participate'), 'حسابك للاطلاع فقط', 403);
 
     if (m === 'POST' && p === '/api/me/password') {
       need(await checkPassword(String(body.current || ''), user.pass), 'كلمة المرور الحالية غير صحيحة');
@@ -3223,7 +3247,8 @@ var qrcode = function() {
     let mm = /^\/api\/comments\/(\w+)$/.exec(p);
     if (m === 'DELETE' && mm) {
       const c = db.comments.find((x) => x.id === mm[1]);
-      need(c && (c.userId === user.id || user.isAdmin), 'ما تقدر تحذف هذا التعليق', 403);
+      need(c && ((c.userId === user.id && can(user, 'participate')) || can(user, 'moderate')), 'ما تقدر تحذف هذا التعليق', 403);
+      if (c.userId !== user.id) audit(user, 'حذف تعليق', `${c.name}: ${c.text}`);
       db.comments = db.comments.filter((x) => x !== c); save(); broadcast(); return { ok: true };
     }
     if (m === 'POST' && p === '/api/quiz/answer') {
@@ -3247,14 +3272,20 @@ var qrcode = function() {
     }
 
     if (p.startsWith('/api/admin/')) {
-      need(user.isAdmin, 'هذي الصفحة لفريق النشرة فقط', 403);
+      need(can(user, 'content'), 'ما عندك صلاحية لهذي العملية', 403);
+      const isUsers = p.startsWith('/api/admin/users') || p === '/api/admin/audit';
+      need(!isUsers || can(user, 'users'), 'إدارة الحسابات لمدير النظام فقط', 403);
+      need(p !== '/api/admin/logo' || can(user, 'settings'), 'تغيير هوية الجهة لمدير النظام فقط', 403);
+      if (m !== 'GET' && !isUsers) audit(user, 'تعديل المحتوى', p.replace('/api/admin/', ''));
+      if (m === 'GET' && p === '/api/admin/audit') { let log = []; try { log = JSON.parse(localStorage.getItem(AKEY)) || []; } catch { /* تجاهل */ } return { log }; }
       if (m === 'GET' && p === '/api/admin/data') return { suggestions: db.suggestions, quiz: db.quiz, photos: db.photos, poll: db.poll, weather: db.weather };
       mm = /^\/api\/admin\/section\/(\w+)$/.exec(p);
       if (m === 'PUT' && mm) {
         const key = mm[1];
         if (LIST[key]) { need(Array.isArray(body.items), 'بيانات غير صالحة'); db[key] = body.items.slice(0, 50).map((it) => cleanItem(LIST[key], it || {})); }
         else if (key === 'issue') {
-          for (const f of ['title', 'greeting', 'dateFrom', 'dateTo', 'quote', 'footer', 'orgName', 'orgNameEn']) db.issue[f] = str(body[f], 1000);
+          for (const f of ['title', 'greeting', 'dateFrom', 'dateTo', 'quote', 'footer']) db.issue[f] = str(body[f], 1000);
+          if (can(user, 'settings')) for (const f of ['orgName', 'orgNameEn']) db.issue[f] = str(body[f], 1000);
           const site = str(body.siteUrl, 300).replace(/\/+$/, '');
           need(!site || /^https?:\/\/\S+$/.test(site), 'رابط المنصة لازم يبدأ بـ http:// أو https://');
           db.issue.siteUrl = site; db.issue.number = Math.max(1, parseInt(body.number, 10) || 1);
@@ -3340,9 +3371,10 @@ var qrcode = function() {
         else { const s = db.suggestions.find((x) => x.id === mm[1]); if (s) s.done = !s.done; }
         save(); broadcast(); return { ok: true };
       }
-      if (m === 'GET' && p === '/api/admin/users') return { users: db.users.map(publicUser) };
+      if (m === 'GET' && p === '/api/admin/users') return { users: db.users.map(publicUser), roles: Object.keys(ROLES) };
       if (m === 'POST' && p === '/api/admin/users/import') {
         const created = []; const skipped = [];
+        const role = ROLES[body.role] ? body.role : 'employee';
         for (const line of String(body.text || '').split(/\r?\n/).map((l) => l.trim()).filter(Boolean).slice(0, 3000)) {
           const parts = line.split(/[\t,،;]+/).map((x) => x.trim().replace(/^<|>$/g, '')).filter(Boolean);
           const email = parts.find((x) => EMAIL_RE.test(x))?.toLowerCase();
@@ -3350,10 +3382,12 @@ var qrcode = function() {
           if (db.users.some((u) => u.email === email)) { skipped.push({ line, reason: 'الحساب موجود من قبل' }); continue; }
           const name = str(parts.filter((x) => x.toLowerCase() !== email).join(' '), 80) || nameFromEmail(email);
           const password = makePassword();
-          const u = { id: rid(), name, email, username: makeUsername(email), pass: await hashPassword(password), isAdmin: false, createdAt: now() };
+          const u = { id: rid(), name, email, username: makeUsername(email), pass: await hashPassword(password), role, createdAt: now() };
           db.users.push(u); created.push({ name, email, username: u.username, password });
         }
-        save(); return { created, skipped };
+        save();
+        if (created.length) audit(user, 'إنشاء حسابات', `${created.length} حساب بصلاحية ${role}`);
+        return { created, skipped };
       }
       mm = /^\/api\/admin\/users\/(\w+)(\/reset)?$/.exec(p);
       if (mm) {
@@ -3365,12 +3399,16 @@ var qrcode = function() {
         }
         if (m === 'PUT') {
           need(str(body.name, 80), 'اكتب اسم صاحب الحساب');
-          need(body.isAdmin || !t.isAdmin || db.users.filter((u) => u.isAdmin).length > 1, 'لازم يبقى مدير واحد على الأقل');
-          t.name = str(body.name, 80); t.isAdmin = !!body.isAdmin; save(); broadcast(); return { ok: true };
+          const role = body.role || t.role;
+          need(ROLES[role], 'صلاحية غير معروفة');
+          need(role === 'admin' || t.role !== 'admin' || admins().length > 1, 'لازم يبقى مدير نظام واحد على الأقل');
+          if (role !== t.role) audit(user, 'تغيير صلاحية', `${t.username}: ${t.role} ← ${role}`);
+          t.name = str(body.name, 80); t.role = role; save(); broadcast(); return { ok: true };
         }
         if (m === 'DELETE') {
           need(t.id !== user.id, 'ما تقدر تحذف حسابك وأنت داخل فيه');
-          need(!t.isAdmin || db.users.filter((u) => u.isAdmin).length > 1, 'لازم يبقى مدير واحد على الأقل');
+          need(t.role !== 'admin' || admins().length > 1, 'لازم يبقى مدير نظام واحد على الأقل');
+          audit(user, 'حذف حساب', t.username);
           db.users = db.users.filter((u) => u !== t); save(); return { ok: true };
         }
       }
@@ -3523,6 +3561,17 @@ const ICON_PATHS = {
 };
 const icon = (name, cls = 'ic') => `<svg class="${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICON_PATHS[name] || ICON_PATHS.grid}</svg>`;
 
+// الأدوار والصلاحيات (نفس تعريف الخادم)
+const ROLE_LABELS = { admin: 'مدير النظام', editor: 'محرر المحتوى', moderator: 'مراقب التعليقات', employee: 'موظف', viewer: 'اطلاع فقط' };
+const ROLE_HINTS = {
+  admin: 'كل شي: المحتوى والحسابات والصلاحيات وهوية الجهة وسجل العمليات',
+  editor: 'يضيف ويعدّل المحتوى، يعتمد المشاركات والصور، ويحذف التعليقات',
+  moderator: 'يحذف التعليقات المخالفة فقط',
+  employee: 'يقرأ ويصوّت ويعلّق ويرسل مشاركات',
+  viewer: 'يشوف الصفحة فقط بدون أي تفاعل',
+};
+const canDo = (me, perm) => (me?.perms || []).includes(perm);
+
 // الرابط الأساسي للملف (يُستخدم في QR والإيميلات إذا ما انحط رابط المنصة)
 const SITE_BASE = location.protocol === 'file:' ? location.href.split('#')[0] : location.origin;
 
@@ -3609,7 +3658,7 @@ let layoutMode = store.get('wk-layout') === '1';
 const SIZE_NAMES = { sm: 'صغير', md: 'متوسط', lg: 'كبير', full: 'كامل' };
 const WIDTH_NAMES = { quarter: 'ربع', third: 'ثلث', half: 'نص', full: 'كامل' };
 function sizeTools(sec, item) {
-  if (!layoutMode || !state.me.isAdmin) return '';
+  if (!layoutMode || !canDo(state.me, 'content')) return '';
   const current = SIZES.includes(item.size) ? item.size : '';
   return `<div class="lay-tools" title="حجم هذي المشاركة">📐
     ${SIZES.map((k) => `<button type="button" class="${current === k ? 'on' : ''}" data-act="lay" data-sec="${sec}" data-id="${esc(item.id)}" data-size="${k}">${SIZE_NAMES[k]}</button>`).join('')}
@@ -3635,14 +3684,15 @@ function interact(targetId) {
   return `
   <div class="interact" data-target="${esc(targetId)}">
     <div class="interact-bar">
-      <button class="pill like ${lk.mine ? 'on' : ''}" data-act="like" aria-pressed="${lk.mine}">${icon('heart')} عجبني${lk.count ? ` <b>${arNum(lk.count)}</b>` : ''}</button>
+      <button class="pill like ${lk.mine ? 'on' : ''}" data-act="like" aria-pressed="${lk.mine}" ${canDo(state.me, 'participate') ? '' : 'disabled'}>${icon('heart')} عجبني${lk.count ? ` <b>${arNum(lk.count)}</b>` : ''}</button>
       <button class="pill" data-act="toggle-comments" aria-expanded="${open}">${icon('comment')} تعليق${cs.length ? ` <b>${arNum(cs.length)}</b>` : ''}</button>
     </div>
     ${open ? `
     <div class="comments">
       ${cs.map((c) => `<div class="comment"><b>${esc(c.name)}</b> <span class="muted">${timeAgo(c.createdAt)}</span>
-        ${c.mine || state.me.isAdmin ? `<button class="link-btn small" data-act="del-comment" data-id="${esc(c.id)}">حذف</button>` : ''}<p>${esc(c.text)}</p></div>`).join('') || '<p class="muted small">كن أول من يعلّق 👀</p>'}
-      <form class="comment-form" data-act="comment">
+        ${(c.mine && canDo(state.me, 'participate')) || canDo(state.me, 'moderate') ? `<button class="link-btn small" data-act="del-comment" data-id="${esc(c.id)}">حذف</button>` : ''}<p>${esc(c.text)}</p></div>`).join('') || '<p class="muted small">كن أول من يعلّق 👀</p>'}
+      ${canDo(state.me, 'participate') ? '' : '<p class="muted small">حسابك للاطلاع فقط</p>'}
+      <form class="comment-form" data-act="comment" ${canDo(state.me, 'participate') ? '' : 'hidden'}>
         <input name="text" placeholder="اكتب تعليقك…" maxlength="1000" required value="${esc(drafts[targetId] || '')}" data-draft="${esc(targetId)}">
         <button class="btn sm">نشر</button>
       </form>
@@ -3707,12 +3757,19 @@ function renderIssue() {
   renderBrand(i);
   $('#issue-quote').textContent = i.quote ? `“${i.quote}”` : '';
   $('#issue-footer').textContent = i.footer || '';
-  $('#hello').textContent = `هلا ${state.me.name} 👋`;
-  $('#admin-link').hidden = !state.me.isAdmin;
+  $('#hello').textContent = `هلا ${state.me.name} 👋${state.me.role === 'employee' ? '' : ` · ${ROLE_LABELS[state.me.role] || ''}`}`;
+  const staff = canDo(state.me, 'content') || canDo(state.me, 'moderate');
+  $('#admin-link').hidden = !staff;
+  $('#admin-link').textContent = canDo(state.me, 'content') ? 'لوحة الإدارة' : 'مراجعة التعليقات';
   const lt = $('#layout-toggle');
-  lt.hidden = !state.me.isAdmin;
+  lt.hidden = !canDo(state.me, 'content');
+  // حساب الاطلاع: نخفي نماذج الإرسال
+  const ro = !canDo(state.me, 'participate');
+  $('#photo-form').closest('details').hidden = ro;
+  $('#suggest-form').hidden = ro;
+  $('#ro-note').hidden = !ro;
   lt.textContent = layoutMode ? '✅ إنهاء التنسيق' : '📐 تنسيق الصفحة';
-  document.body.classList.toggle('layout-mode', layoutMode && state.me.isAdmin);
+  document.body.classList.toggle('layout-mode', layoutMode && canDo(state.me, 'content'));
 }
 
 // عناوين الأقسام وترتيبها وإظهارها من إعدادات الإدارة
@@ -3729,7 +3786,7 @@ function renderSections() {
     // مرفق القسم وأدوات التنسيق تحت العنوان
     let extra = $('.sec-extra', el);
     if (!extra) { extra = document.createElement('div'); extra.className = 'sec-extra'; $('.sec-head', el).after(extra); }
-    extra.innerHTML = (layoutMode && state.me.isAdmin ? sectionTools(s) : '') + attachments(s);
+    extra.innerHTML = (layoutMode && canDo(state.me, 'content') ? sectionTools(s) : '') + attachments(s);
     const empty = s.key === 'occasions' && !state.occasions.length;
     el.hidden = !s.visible || empty;
     $('.sec-head h2', el).textContent = s.title;
@@ -3739,7 +3796,7 @@ function renderSections() {
     $('.sec-count', el).hidden = n === null;
     $('.sec-head p', el).textContent = s.subtitle;
     // زر تعديل سريع للإدارة: يفتح لوحة الإدارة على محتوى هذا القسم
-    if (state.me.isAdmin && !$('.edit-sec', el)) {
+    if (canDo(state.me, 'content') && !$('.edit-sec', el)) {
       const b = document.createElement('button');
       b.type = 'button'; b.className = 'edit-sec'; b.textContent = '✏️ تعديل';
       b.onclick = () => { store.set('wk-admin-tab', ADMIN_TAB[s.key]); location.href = $('#admin-link').getAttribute('href'); };
@@ -3830,14 +3887,15 @@ function renderPoll() {
   const c = p.counts;
   const total = c.home + c.away + c.draw;
   const voted = !!p.myVote;
-  const showResults = voted || p.closed;
+  const ro = !canDo(state.me, 'participate');
+  const showResults = voted || p.closed || ro;
   const opts = [['home', p.home], ...(p.allowDraw ? [['draw', 'تعادل 🤝']] : []), ['away', p.away]];
   $('#poll-box').innerHTML = `
     <h3>${esc(p.question)}</h3>
     <div class="poll-opts">
       ${opts.map(([k, name]) => {
         const pct = total ? Math.round((c[k] / total) * 100) : 0;
-        return `<button class="poll-opt ${p.myVote === k ? 'mine' : ''}" data-act="vote" data-choice="${k}" ${p.closed ? 'disabled' : ''}>
+        return `<button class="poll-opt ${p.myVote === k ? 'mine' : ''}" data-act="vote" data-choice="${k}" ${p.closed || ro ? 'disabled' : ''}>
           <span class="bar" style="width:${showResults ? pct : 0}%"></span>
           <span class="opt-name">${esc(name)} ${p.myVote === k ? '✓' : ''}</span>
           ${showResults ? `<span class="opt-pct">${pct}% <small>(${c[k]})</small></span>` : ''}
@@ -3959,6 +4017,7 @@ function renderQuiz() {
       ${q.accepted ? `<br><span class="small">الإجابة الصحيحة: ${esc(q.accepted[0] || '')}</span>` : ''}</div>`
     : q.closed ? '<div class="winner soft">🔒 المسابقة انتهت، الفائز يُعلن قريب</div>'
     : q.answered ? '<div class="winner soft">✅ وصلتنا إجابتك، بالتوفيق في السحب!</div>'
+    : !canDo(state.me, 'participate') ? '<div class="winner soft">👀 حسابك للاطلاع فقط</div>'
     : `<form id="quiz-form" class="form row-form">
         <input name="dept" placeholder="إدارتك (اختياري)" maxlength="60">
         <input name="answer" placeholder="إجابتك" required maxlength="200">
@@ -4193,6 +4252,9 @@ const sizeOpts = () => SIZE_LABELS;
 const WIDTH_LABELS = { quarter: 'ربع الصفحة', third: 'ثلث الصفحة', half: 'نص الصفحة', full: 'الصفحة كاملة' };
 const widthSelect = (id, value) => `<select ${id}>${Object.entries(WIDTH_LABELS).map(([k, v]) => `<option value="${k}" ${k === (value || 'full') ? 'selected' : ''}>${v}</option>`).join('')}</select>`;
 
+const roleSelect = (name, value) => `<select name="${name}" style="width:auto">${Object.entries(ROLE_LABELS).map(([k, v]) => `<option value="${k}" ${k === value ? 'selected' : ''}>${v}</option>`).join('')}</select>`;
+let auditLog = [];
+
 // ---------- المرفقات الاختيارية (صورة و/أو مستند) ----------
 function attachField(it) {
   const img = it.image || '';
@@ -4297,7 +4359,7 @@ const LIST_SCHEMAS = {
 const TABS = {
   issue: '📰 العدد', sections: '🗂️ ترتيب الأقسام وعناوينها', users: '👥 الموظفين', matches: '⚽ المباريات', poll: '🔮 الاستطلاع', recommendations: '💡 التوصيات',
   lens: '📸 عدسة الموظف', creative: '✍️ الإبداع', selfdev: '🌱 تطوير الذات', occasions: '🎉 المناسبات',
-  quiz: '🧩 المسابقة', box: '📮 الصندوق', comments: '💬 التعليقات', email: '📧 نسخة الإيميل',
+  quiz: '🧩 المسابقة', box: '📮 الصندوق', comments: '💬 التعليقات', email: '📧 نسخة الإيميل', audit: '📜 سجل العمليات',
 };
 
 // ---------- عناصر مساعدة ----------
@@ -4398,7 +4460,7 @@ const views = {
       ${field('greeting', 'كلمة الترحيب', 'textarea', i.greeting)}
       ${field('quote', 'اقتباس الأسبوع (يطلع في آخر الصفحة)', 'text', i.quote)}
       ${field('footer', 'سطر نهاية الصفحة', 'text', i.footer)}
-      <h3 style="margin-top:10px">🏛️ هوية الجهة</h3>
+      ${canDo(pub.me, 'settings') ? `<h3 style="margin-top:10px">🏛️ هوية الجهة</h3>
       <div class="row">${field('orgName', 'اسم الجهة', 'text', i.orgName)}${field('orgNameEn', 'اسم الجهة بالإنجليزي', 'text', i.orgNameEn)}</div>
       <div class="logo-row">
         ${i.logo ? `<img src="${esc(i.logo)}" alt="الشعار الحالي">` : '<span class="muted">ما فيه شعار مرفوع</span>'}
@@ -4407,7 +4469,7 @@ const views = {
         ${i.logo !== '/logo.png' ? '<button type="button" class="pill" id="logo-reset">استعادة الشعار الأساسي</button>' : ''}
       </div>
       ${field('siteUrl', 'رابط المنصة للموظفين (يُستخدم في QR والإيميلات)، مثل http://192.168.1.25:3000', 'url', i.siteUrl)}
-      <p class="muted small">إذا تركته فاضي نستخدم الرابط اللي فاتح منه الحين: <span class="cred">${esc(SITE_BASE)}</span></p>
+      <p class="muted small">إذا تركته فاضي نستخدم الرابط اللي فاتح منه الحين: <span class="cred">${esc(SITE_BASE)}</span></p>` : ''}
       <button class="btn">💾 حفظ ونشر</button></form>`;
   },
   sections() {
@@ -4465,16 +4527,18 @@ const views = {
         <label>الصق القائمة هنا: كل سطر فيه اسم الموظف وإيميله (تقدر تنسخ عمودين من الإكسل مباشرة)
           <textarea name="text" rows="6" dir="auto" placeholder="أحمد محمد, ahmed.m@company.com&#10;سارة علي, sara.ali@company.com"></textarea></label>
         <p class="muted small">اسم المستخدم يتكوّن من أول الإيميل (قبل @)، والموظف يقدر يدخل بالإيميل كامل بعد. إذا ما فيه اسم نأخذه من الإيميل وتقدر تعدّله تحت.</p>
+        <label>صلاحية الحسابات الجديدة ${roleSelect('role', 'employee')}</label>
         <button class="btn">إنشاء الحسابات</button>
       </form>
+      <div class="roles-legend">${Object.keys(ROLE_LABELS).map((r) => `<div><b>${ROLE_LABELS[r]}</b><span class="muted small">${ROLE_HINTS[r]}</span></div>`).join('')}</div>
       ${credsBox}
       <h3 style="margin-top:24px">👥 الحسابات (${users.length})</h3>
       <input id="user-search" placeholder="🔍 ابحث بالاسم أو الإيميل" style="margin:8px 0">
-      <div class="table-wrap"><table class="table" id="users-table"><tr><th>الاسم</th><th>الإيميل</th><th>اسم المستخدم</th><th>مدير</th><th>آخر دخول</th><th></th></tr>
+      <div class="table-wrap"><table class="table" id="users-table"><tr><th>الاسم</th><th>الإيميل</th><th>اسم المستخدم</th><th>الصلاحية</th><th>آخر دخول</th><th></th></tr>
       ${users.map((u) => `<tr data-uid="${u.id}" data-search="${esc((u.name + ' ' + u.email + ' ' + u.username).toLowerCase())}">
         <td><input name="name" value="${esc(u.name)}" style="min-width:140px"></td>
         <td class="cred">${esc(u.email)}</td><td class="cred">${esc(u.username)}</td>
-        <td><input type="checkbox" name="isAdmin" ${u.isAdmin ? 'checked' : ''} style="width:auto"></td>
+        <td>${roleSelect('role', u.role)}</td>
         <td class="muted small">${u.lastLogin ? timeAgo(u.lastLogin) : 'ما دخل بعد'}</td>
         <td class="actions"><button class="pill" data-uop="save">💾</button><button class="pill" data-uop="reset">🔑 كلمة مرور جديدة</button>
           ${u.id === pub.me.id ? '' : '<button class="pill" data-uop="delete">🗑️</button>'}</td></tr>`).join('')}
@@ -4558,9 +4622,18 @@ const views = {
   },
   comments() {
     const list = [...pub.comments].reverse();
-    return `<table class="table"><tr><th>الاسم</th><th>التعليق</th><th>الوقت</th><th></th></tr>
-    ${list.map((c) => `<tr><td>${esc(c.name)}</td><td>${esc(c.text)}</td><td class="muted">${timeAgo(c.createdAt)}</td>
+    return `<p class="notice">🛡️ هنا كل تعليقات الموظفين، الأحدث أول. احذف أي تعليق مخالف، والحذف ينسجّل في سجل العمليات.</p>
+    <input id="comment-search" placeholder="🔍 ابحث في التعليقات أو بالاسم" style="margin:10px 0">
+    <table class="table" id="comments-table"><tr><th>الاسم</th><th>التعليق</th><th>الوقت</th><th></th></tr>
+    ${list.map((c) => `<tr data-search="${esc((c.name + ' ' + c.text).toLowerCase())}"><td>${esc(c.name)}</td><td>${esc(c.text)}</td><td class="muted">${timeAgo(c.createdAt)}</td>
       <td><button class="pill" data-cdel="${c.id}">🗑️ حذف</button></td></tr>`).join('') || '<tr><td colspan="4" class="muted">ما فيه تعليقات.</td></tr>'}</table>`;
+  },
+  audit() {
+    return `<p class="notice">📜 سجل بكل العمليات المهمة: الدخول، تعديل المحتوى، حذف التعليقات، وتغيير الحسابات والصلاحيات. السجل ما ينحذف ولا ينعدّل.</p>
+      <div class="table-wrap" style="margin-top:12px"><table class="table"><tr><th>الوقت</th><th>المستخدم</th><th>الصلاحية</th><th>العملية</th><th>التفاصيل</th></tr>
+      ${auditLog.map((r) => `<tr><td class="muted small" style="white-space:nowrap">${esc(new Date(r.at).toLocaleString('ar-SA-u-ca-gregory', { dateStyle: 'short', timeStyle: 'short', timeZone: 'Asia/Riyadh' }))}</td>
+        <td>${esc(r.user_name)}</td><td class="small">${esc(ROLE_LABELS[r.role] || r.role)}</td><td>${esc(r.action)}</td><td class="small" style="overflow-wrap:anywhere">${esc(r.details)}</td></tr>`).join('')
+        || '<tr><td colspan="5" class="muted">ما فيه عمليات بعد.</td></tr>'}</table></div>`;
   },
 };
 
@@ -4591,8 +4664,11 @@ const CONTENT_HINT = {
 };
 // أسماء التبويبات تتبع عناوين الأقسام وترتيبها في الصفحة
 function tabOrder() {
+  // المراقب يشوف التعليقات بس، والمحرر كل شي ما عدا الحسابات وسجل العمليات
+  if (!canDo(pub.me, 'content')) return ['comments'];
   const secTabs = pub.sections.map((x) => SECTION_TAB[x.key]).filter(Boolean);
-  return ['issue', 'sections', ...secTabs, 'users', 'comments', 'email'];
+  const adminTabs = canDo(pub.me, 'users') ? ['users', 'audit'] : [];
+  return ['issue', 'sections', ...secTabs, ...adminTabs, 'comments', 'email'];
 }
 function tabLabel(k) {
   const sec = pub.sections.find((x) => x.key === TAB_SECTION[k]);
@@ -4708,6 +4784,12 @@ function renderTab() {
   if (tab === 'sections') return bindSections();
   if (tab === 'issue') bindLogo();
   if (tab === 'lens') bindPhotoAdd();
+  if (tab === 'comments') {
+    $('#comment-search').addEventListener('input', (e) => {
+      const q = e.target.value.trim().toLowerCase();
+      document.querySelectorAll('#comments-table tr[data-search]').forEach((tr) => { tr.hidden = q && !tr.dataset.search.includes(q); });
+    });
+  }
   if (tab === 'users') return bindUsers();
   if (tab === 'email') return bindEmail();
   const f = $('#f');
@@ -4857,6 +4939,7 @@ function readLogo(file) {
 }
 
 function bindLogo() {
+  if (!$('#logo-file')) return; // هوية الجهة تظهر لمدير النظام فقط
   $('#logo-file').onchange = async (e) => {
     if (!e.target.files[0]) return;
     try {
@@ -4907,7 +4990,7 @@ function bindUsers() {
     const btn = $('button', e.target);
     btn.disabled = true;
     try {
-      const { created, skipped } = await adminApi('/api/admin/users/import', { method: 'POST', body: { text: e.target.text.value } });
+      const { created, skipped } = await adminApi('/api/admin/users/import', { method: 'POST', body: { text: e.target.text.value, role: e.target.role.value } });
       lastCreds = [...created, ...lastCreds];
       await load();
       toast(`تم إنشاء ${created.length} حساب${skipped.length ? ` · تم تخطّي ${skipped.length}` : ''}`);
@@ -4927,7 +5010,7 @@ function bindUsers() {
     const u = users.find((x) => x.id === uid);
     try {
       if (b.dataset.uop === 'save') {
-        await adminApi(`/api/admin/users/${uid}`, { method: 'PUT', body: { name: $('[name=name]', tr).value, isAdmin: $('[name=isAdmin]', tr).checked } });
+        await adminApi(`/api/admin/users/${uid}`, { method: 'PUT', body: { name: $('[name=name]', tr).value, role: $('[name=role]', tr).value } });
         toast('تم الحفظ ✅');
       } else if (b.dataset.uop === 'reset') {
         if (!confirm(`نعمل كلمة مرور جديدة لـ ${u.name}؟ القديمة بتوقف على طول.`)) return;
@@ -5080,8 +5163,15 @@ async function bindEmail() {
 // ---------- التحميل ----------
 
 async function load() {
-  [pub, priv, { users }] = await Promise.all([api('/api/state'), adminApi('/api/admin/data'), adminApi('/api/admin/users')]);
-  if (!TABS[tab]) tab = 'issue';
+  pub = await api('/api/state');
+  if (!canDo(pub.me, 'content') && !canDo(pub.me, 'moderate')) throw new Error('هذي الصفحة لفريق النشرة فقط');
+  // بيانات الإدارة حسب الصلاحية: المراقب يكفيه التعليقات اللي في الحالة العامة
+  priv = canDo(pub.me, 'content') ? await adminApi('/api/admin/data') : { suggestions: [], photos: [], quiz: {}, poll: {}, weather: {} };
+  if (canDo(pub.me, 'users')) {
+    [{ users }, { log: auditLog }] = await Promise.all([adminApi('/api/admin/users'), adminApi('/api/admin/audit')]);
+  }
+  $('.admin-bar h2').textContent = canDo(pub.me, 'content') ? '🛠️ إدارة ويكند سعيد' : '🛡️ مراجعة التعليقات';
+  if (!tabOrder().includes(tab)) tab = tabOrder()[0];
   $('#panel').hidden = false;
   $('#denied').hidden = true;
   renderTab();
@@ -5096,7 +5186,8 @@ function connect() {
     clearTimeout(liveTimer);
     liveTimer = setTimeout(async () => {
       try {
-        [pub, priv] = await Promise.all([api('/api/state'), adminApi('/api/admin/data')]);
+        pub = await api('/api/state');
+        if (canDo(pub.me, 'content')) priv = await adminApi('/api/admin/data');
         if (LIVE_TABS.includes(tab)) renderTab();
         else renderTabsBar();
       } catch { /* نحاول مع التحديث الجاي */ }

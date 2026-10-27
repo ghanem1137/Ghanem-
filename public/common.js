@@ -105,3 +105,14 @@ const ICON_PATHS = {
   grid: '<rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/>',
 };
 const icon = (name, cls = 'ic') => `<svg class="${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICON_PATHS[name] || ICON_PATHS.grid}</svg>`;
+
+// الأدوار والصلاحيات (نفس تعريف الخادم)
+const ROLE_LABELS = { admin: 'مدير النظام', editor: 'محرر المحتوى', moderator: 'مراقب التعليقات', employee: 'موظف', viewer: 'اطلاع فقط' };
+const ROLE_HINTS = {
+  admin: 'كل شي: المحتوى والحسابات والصلاحيات وهوية الجهة وسجل العمليات',
+  editor: 'يضيف ويعدّل المحتوى، يعتمد المشاركات والصور، ويحذف التعليقات',
+  moderator: 'يحذف التعليقات المخالفة فقط',
+  employee: 'يقرأ ويصوّت ويعلّق ويرسل مشاركات',
+  viewer: 'يشوف الصفحة فقط بدون أي تفاعل',
+};
+const canDo = (me, perm) => (me?.perms || []).includes(perm);

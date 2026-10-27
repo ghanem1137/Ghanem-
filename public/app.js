@@ -31,7 +31,7 @@ let layoutMode = store.get('wk-layout') === '1';
 const SIZE_NAMES = { sm: 'صغير', md: 'متوسط', lg: 'كبير', full: 'كامل' };
 const WIDTH_NAMES = { quarter: 'ربع', third: 'ثلث', half: 'نص', full: 'كامل' };
 function sizeTools(sec, item) {
-  if (!layoutMode || !state.me.isAdmin) return '';
+  if (!layoutMode || !canDo(state.me, 'content')) return '';
   const current = SIZES.includes(item.size) ? item.size : '';
   return `<div class="lay-tools" title="حجم هذي المشاركة">📐
     ${SIZES.map((k) => `<button type="button" class="${current === k ? 'on' : ''}" data-act="lay" data-sec="${sec}" data-id="${esc(item.id)}" data-size="${k}">${SIZE_NAMES[k]}</button>`).join('')}
@@ -57,14 +57,15 @@ function interact(targetId) {
   return `
   <div class="interact" data-target="${esc(targetId)}">
     <div class="interact-bar">
-      <button class="pill like ${lk.mine ? 'on' : ''}" data-act="like" aria-pressed="${lk.mine}">${icon('heart')} عجبني${lk.count ? ` <b>${arNum(lk.count)}</b>` : ''}</button>
+      <button class="pill like ${lk.mine ? 'on' : ''}" data-act="like" aria-pressed="${lk.mine}" ${canDo(state.me, 'participate') ? '' : 'disabled'}>${icon('heart')} عجبني${lk.count ? ` <b>${arNum(lk.count)}</b>` : ''}</button>
       <button class="pill" data-act="toggle-comments" aria-expanded="${open}">${icon('comment')} تعليق${cs.length ? ` <b>${arNum(cs.length)}</b>` : ''}</button>
     </div>
     ${open ? `
     <div class="comments">
       ${cs.map((c) => `<div class="comment"><b>${esc(c.name)}</b> <span class="muted">${timeAgo(c.createdAt)}</span>
-        ${c.mine || state.me.isAdmin ? `<button class="link-btn small" data-act="del-comment" data-id="${esc(c.id)}">حذف</button>` : ''}<p>${esc(c.text)}</p></div>`).join('') || '<p class="muted small">كن أول من يعلّق 👀</p>'}
-      <form class="comment-form" data-act="comment">
+        ${(c.mine && canDo(state.me, 'participate')) || canDo(state.me, 'moderate') ? `<button class="link-btn small" data-act="del-comment" data-id="${esc(c.id)}">حذف</button>` : ''}<p>${esc(c.text)}</p></div>`).join('') || '<p class="muted small">كن أول من يعلّق 👀</p>'}
+      ${canDo(state.me, 'participate') ? '' : '<p class="muted small">حسابك للاطلاع فقط</p>'}
+      <form class="comment-form" data-act="comment" ${canDo(state.me, 'participate') ? '' : 'hidden'}>
         <input name="text" placeholder="اكتب تعليقك…" maxlength="1000" required value="${esc(drafts[targetId] || '')}" data-draft="${esc(targetId)}">
         <button class="btn sm">نشر</button>
       </form>
@@ -129,12 +130,19 @@ function renderIssue() {
   renderBrand(i);
   $('#issue-quote').textContent = i.quote ? `“${i.quote}”` : '';
   $('#issue-footer').textContent = i.footer || '';
-  $('#hello').textContent = `هلا ${state.me.name} 👋`;
-  $('#admin-link').hidden = !state.me.isAdmin;
+  $('#hello').textContent = `هلا ${state.me.name} 👋${state.me.role === 'employee' ? '' : ` · ${ROLE_LABELS[state.me.role] || ''}`}`;
+  const staff = canDo(state.me, 'content') || canDo(state.me, 'moderate');
+  $('#admin-link').hidden = !staff;
+  $('#admin-link').textContent = canDo(state.me, 'content') ? 'لوحة الإدارة' : 'مراجعة التعليقات';
   const lt = $('#layout-toggle');
-  lt.hidden = !state.me.isAdmin;
+  lt.hidden = !canDo(state.me, 'content');
+  // حساب الاطلاع: نخفي نماذج الإرسال
+  const ro = !canDo(state.me, 'participate');
+  $('#photo-form').closest('details').hidden = ro;
+  $('#suggest-form').hidden = ro;
+  $('#ro-note').hidden = !ro;
   lt.textContent = layoutMode ? '✅ إنهاء التنسيق' : '📐 تنسيق الصفحة';
-  document.body.classList.toggle('layout-mode', layoutMode && state.me.isAdmin);
+  document.body.classList.toggle('layout-mode', layoutMode && canDo(state.me, 'content'));
 }
 
 // عناوين الأقسام وترتيبها وإظهارها من إعدادات الإدارة
@@ -151,7 +159,7 @@ function renderSections() {
     // مرفق القسم وأدوات التنسيق تحت العنوان
     let extra = $('.sec-extra', el);
     if (!extra) { extra = document.createElement('div'); extra.className = 'sec-extra'; $('.sec-head', el).after(extra); }
-    extra.innerHTML = (layoutMode && state.me.isAdmin ? sectionTools(s) : '') + attachments(s);
+    extra.innerHTML = (layoutMode && canDo(state.me, 'content') ? sectionTools(s) : '') + attachments(s);
     const empty = s.key === 'occasions' && !state.occasions.length;
     el.hidden = !s.visible || empty;
     $('.sec-head h2', el).textContent = s.title;
@@ -161,7 +169,7 @@ function renderSections() {
     $('.sec-count', el).hidden = n === null;
     $('.sec-head p', el).textContent = s.subtitle;
     // زر تعديل سريع للإدارة: يفتح لوحة الإدارة على محتوى هذا القسم
-    if (state.me.isAdmin && !$('.edit-sec', el)) {
+    if (canDo(state.me, 'content') && !$('.edit-sec', el)) {
       const b = document.createElement('button');
       b.type = 'button'; b.className = 'edit-sec'; b.textContent = '✏️ تعديل';
       b.onclick = () => { store.set('wk-admin-tab', ADMIN_TAB[s.key]); location.href = $('#admin-link').getAttribute('href'); };
@@ -252,14 +260,15 @@ function renderPoll() {
   const c = p.counts;
   const total = c.home + c.away + c.draw;
   const voted = !!p.myVote;
-  const showResults = voted || p.closed;
+  const ro = !canDo(state.me, 'participate');
+  const showResults = voted || p.closed || ro;
   const opts = [['home', p.home], ...(p.allowDraw ? [['draw', 'تعادل 🤝']] : []), ['away', p.away]];
   $('#poll-box').innerHTML = `
     <h3>${esc(p.question)}</h3>
     <div class="poll-opts">
       ${opts.map(([k, name]) => {
         const pct = total ? Math.round((c[k] / total) * 100) : 0;
-        return `<button class="poll-opt ${p.myVote === k ? 'mine' : ''}" data-act="vote" data-choice="${k}" ${p.closed ? 'disabled' : ''}>
+        return `<button class="poll-opt ${p.myVote === k ? 'mine' : ''}" data-act="vote" data-choice="${k}" ${p.closed || ro ? 'disabled' : ''}>
           <span class="bar" style="width:${showResults ? pct : 0}%"></span>
           <span class="opt-name">${esc(name)} ${p.myVote === k ? '✓' : ''}</span>
           ${showResults ? `<span class="opt-pct">${pct}% <small>(${c[k]})</small></span>` : ''}
@@ -381,6 +390,7 @@ function renderQuiz() {
       ${q.accepted ? `<br><span class="small">الإجابة الصحيحة: ${esc(q.accepted[0] || '')}</span>` : ''}</div>`
     : q.closed ? '<div class="winner soft">🔒 المسابقة انتهت، الفائز يُعلن قريب</div>'
     : q.answered ? '<div class="winner soft">✅ وصلتنا إجابتك، بالتوفيق في السحب!</div>'
+    : !canDo(state.me, 'participate') ? '<div class="winner soft">👀 حسابك للاطلاع فقط</div>'
     : `<form id="quiz-form" class="form row-form">
         <input name="dept" placeholder="إدارتك (اختياري)" maxlength="60">
         <input name="answer" placeholder="إجابتك" required maxlength="200">

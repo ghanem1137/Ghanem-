@@ -13,11 +13,25 @@ const WEATHER_API = process.env.WEATHER_API || 'https://api.open-meteo.com';
 const GEO_API = process.env.GEO_API || 'https://geocoding-api.open-meteo.com';
 const DATA_DIR = path.join(__dirname, 'data');
 const UPLOAD_DIR = path.join(DATA_DIR, 'uploads');
-const DB_FILE = path.join(DATA_DIR, 'db.json');
+const DB_FILE = path.join(DATA_DIR, 'weekend.db');      // قاعدة البيانات (SQLite)
+const OLD_JSON = path.join(DATA_DIR, 'db.json');         // ملف النسخ السابقة، ينتقل للقاعدة تلقائياً
 const PUBLIC_DIR = path.join(__dirname, 'public');
 const SESSION_DAYS = 30;
 
 fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+const { openStore } = require('./storage');
+const store = openStore(DB_FILE);
+
+// ---------- الصلاحيات ----------
+// كل دور له مجموعة صلاحيات، والخادم يتحقق منها في كل طلب
+const ROLES = {
+  admin: ['view', 'participate', 'moderate', 'content', 'users', 'settings'], // مدير النظام
+  editor: ['view', 'participate', 'moderate', 'content'],                     // محرر المحتوى
+  moderator: ['view', 'participate', 'moderate'],                              // مراقب التعليقات
+  employee: ['view', 'participate'],                                           // موظف
+  viewer: ['view'],                                                            // اطلاع فقط
+};
+const can = (user, perm) => !!user && (ROLES[user.role] || []).includes(perm);
 
 const id = () => crypto.randomBytes(6).toString('hex');
 const now = () => new Date().toISOString();
@@ -78,16 +92,16 @@ function seed() {
     likes: {},      // targetId -> [userId]
     comments: [],   // {id, targetId, userId, name, text, createdAt}
     suggestions: [],
-    users: [],      // {id, name, email, username, pass, isAdmin, createdAt, lastLogin}
+    users: [],      // {id, name, email, username, pass, role, createdAt, lastLogin}
     sessions: {},   // sha256(token) -> {userId, exp}
   };
 }
 
-let db;
-try {
-  db = JSON.parse(fs.readFileSync(DB_FILE, 'utf8'));
-} catch {
-  db = seed();
+let db = store.load();
+let migratedFromJson = false;
+if (!db) {
+  // أول تشغيل بقاعدة البيانات: ننقل بيانات النسخة السابقة (db.json) إذا موجودة
+  try { db = JSON.parse(fs.readFileSync(OLD_JSON, 'utf8')); migratedFromJson = true; } catch { db = seed(); }
 }
 // ترقية البيانات من النسخ السابقة: نضيف أي حقل ناقص بدون ما نلمس الموجود
 {
@@ -97,6 +111,11 @@ try {
   db.sections = normalizeSections(db.sections);
   // النسخ السابقة ما كان فيها شعار: نستخدم شعار الجهة الأساسي إلا إذا المدير حذفه بنفسه
   if (!db.issue.logo && !db.issue.logoRemoved) db.issue.logo = '/logo.png';
+  // النسخ السابقة كان فيها "مدير" أو "موظف" بس: نحوّلها للأدوار الجديدة
+  for (const u of db.users) {
+    if (!ROLES[u.role]) u.role = u.isAdmin ? 'admin' : 'employee';
+    delete u.isAdmin;
+  }
 }
 
 let saveTimer = null;
@@ -105,10 +124,14 @@ function save() {
   saveTimer = setTimeout(saveNow, 200);
 }
 function saveNow() {
-  const tmp = DB_FILE + '.tmp';
-  fs.writeFileSync(tmp, JSON.stringify(db, null, 2));
-  fs.renameSync(tmp, DB_FILE);
+  clearTimeout(saveTimer);
+  store.save(db);
 }
+// نحفظ آخر التعديلات قبل ما يتوقف الخادم
+for (const sig of ['SIGINT', 'SIGTERM']) process.on(sig, () => { try { saveNow(); store.close(); } finally { process.exit(0); } });
+
+// سجل العمليات: من سوّى وش ومتى (يظهر لمدير النظام)
+const audit = (user, action, details) => { try { store.audit(user, action, details); } catch (e) { console.error('سجل العمليات:', e.message); } };
 
 // ---------- كلمات المرور والحسابات ----------
 
@@ -147,15 +170,20 @@ function nameFromEmail(email) {
     .map((w) => w[0].toUpperCase() + w.slice(1)).join(' ');
 }
 
-const publicUser = (u) => ({ id: u.id, name: u.name, email: u.email, username: u.username, isAdmin: !!u.isAdmin, createdAt: u.createdAt, lastLogin: u.lastLogin || null });
+const publicUser = (u) => ({ id: u.id, name: u.name, email: u.email, username: u.username, role: u.role, createdAt: u.createdAt, lastLogin: u.lastLogin || null });
+const admins = () => db.users.filter((u) => u.role === 'admin');
 
 // أول تشغيل: حساب مدير افتراضي
-if (!db.users.some((u) => u.isAdmin)) {
-  db.users.push({ id: id(), name: 'مدير النشرة', email: '', username: 'admin', pass: hashPassword(ADMIN_PASSWORD), isAdmin: true, createdAt: now() });
+if (!admins().length) {
+  db.users.push({ id: id(), name: 'مدير النشرة', email: '', username: 'admin', pass: hashPassword(ADMIN_PASSWORD), role: 'admin', createdAt: now() });
   console.log('تم إنشاء حساب الإدارة: admin');
   if (!process.env.ADMIN_PASSWORD) console.log('⚠️  كلمة المرور الافتراضية weekend123 — غيّرها من المنصة بعد أول دخول');
 }
 saveNow();
+if (migratedFromJson) {
+  fs.renameSync(OLD_JSON, OLD_JSON + '.migrated');
+  console.log('✅ انتقلت بيانات النسخة السابقة إلى قاعدة البيانات data/weekend.db');
+}
 
 // ---------- الجلسات ----------
 
@@ -315,7 +343,7 @@ function publicState(user) {
   for (const [t, arr] of Object.entries(db.likes)) likes[t] = { count: arr.length, mine: arr.includes(user.id) };
   const { accepted, answers, ...quiz } = db.quiz;
   return {
-    me: { id: user.id, name: user.name, username: user.username, isAdmin: !!user.isAdmin },
+    me: { id: user.id, name: user.name, username: user.username, role: user.role, perms: ROLES[user.role] || [], isAdmin: user.role === 'admin' },
     issue: db.issue,
     sections: db.sections,
     weatherCity: db.weather.enabled ? db.weather.city : null,
@@ -426,7 +454,8 @@ async function api(req, res, url) {
     user.lastLogin = now();
     startSession(res, user);
     save();
-    return send(res, 200, { ok: true, isAdmin: !!user.isAdmin });
+    audit(user, 'دخول');
+    return send(res, 200, { ok: true, role: user.role });
   }
 
   if (m === 'POST' && p === '/api/logout') {
@@ -459,6 +488,10 @@ async function api(req, res, url) {
 
   const big = { '/api/photos': 8, '/api/admin/photos': 8, '/api/admin/logo': 8, '/api/admin/upload': 22 }[p];
   const body = await readBody(req, (big || 0.5) * 1024 * 1024);
+
+  // حساب "اطلاع فقط" يشوف الصفحة بدون تصويت أو تعليق أو مشاركات
+  const PARTICIPATE = ['/api/poll/vote', '/api/like', '/api/comments', '/api/quiz/answer', '/api/photos', '/api/suggestions'];
+  if (m === 'POST' && PARTICIPATE.includes(p)) need(can(user, 'participate'), 'حسابك للاطلاع فقط', 403);
 
   if (m === 'POST' && p === '/api/me/password') {
     need(checkPassword(String(body.current || ''), user.pass), 'كلمة المرور الحالية غير صحيحة');
@@ -502,7 +535,8 @@ async function api(req, res, url) {
   const myComment = /^\/api\/comments\/(\w+)$/.exec(p);
   if (m === 'DELETE' && myComment) {
     const c = db.comments.find((x) => x.id === myComment[1]);
-    need(c && (c.userId === user.id || user.isAdmin), 'ما تقدر تحذف هذا التعليق', 403);
+    need(c && ((c.userId === user.id && can(user, 'participate')) || can(user, 'moderate')), 'ما تقدر تحذف هذا التعليق', 403);
+    if (c.userId !== user.id) audit(user, 'حذف تعليق', `${c.name}: ${c.text}`);
     db.comments = db.comments.filter((x) => x !== c);
     save(); broadcast();
     return send(res, 200, { ok: true });
@@ -539,7 +573,11 @@ async function api(req, res, url) {
 
   // --- الإدارة ---
   if (p.startsWith('/api/admin/')) {
-    need(user.isAdmin, 'هذي الصفحة لفريق النشرة فقط', 403);
+    need(can(user, 'content'), 'ما عندك صلاحية لهذي العملية', 403);
+    const isUsers = p.startsWith('/api/admin/users') || p === '/api/admin/audit';
+    need(!isUsers || can(user, 'users'), 'إدارة الحسابات لمدير النظام فقط', 403);
+    need(p !== '/api/admin/logo' || can(user, 'settings'), 'تغيير هوية الجهة لمدير النظام فقط', 403);
+    if (m !== 'GET' && !isUsers) audit(user, 'تعديل المحتوى', p.replace('/api/admin/', ''));
 
     if (m === 'GET' && p === '/api/admin/data') {
       return send(res, 200, { suggestions: db.suggestions, quiz: db.quiz, photos: db.photos, poll: db.poll, weather: db.weather });
@@ -552,8 +590,10 @@ async function api(req, res, url) {
         need(Array.isArray(body.items), 'بيانات غير صالحة');
         db[key] = body.items.slice(0, 50).map((it) => cleanItem(LIST_SECTIONS[key], it || {}));
       } else if (key === 'issue') {
-        for (const f of ['title', 'greeting', 'dateFrom', 'dateTo', 'quote', 'footer', 'orgName', 'orgNameEn']) db.issue[f] = str(body[f], 1000);
-        const site = str(body.siteUrl, 300).replace(/\/+$/, '');
+        for (const f of ['title', 'greeting', 'dateFrom', 'dateTo', 'quote', 'footer']) db.issue[f] = str(body[f], 1000);
+        // هوية الجهة ورابط المنصة لمدير النظام فقط، والمحرر يعدّل محتوى العدد بس
+        if (can(user, 'settings')) for (const f of ['orgName', 'orgNameEn']) db.issue[f] = str(body[f], 1000);
+        const site = can(user, 'settings') ? str(body.siteUrl, 300).replace(/\/+$/, '') : db.issue.siteUrl;
         need(!site || /^https?:\/\/[^\s]+$/.test(site), 'رابط المنصة لازم يبدأ بـ http:// أو https://');
         db.issue.siteUrl = site;
         db.issue.number = Math.max(1, parseInt(body.number, 10) || 1);
@@ -663,13 +703,15 @@ async function api(req, res, url) {
     }
 
     // --- حسابات الموظفين ---
-    if (m === 'GET' && p === '/api/admin/users') return send(res, 200, { users: db.users.map(publicUser) });
+    if (m === 'GET' && p === '/api/admin/users') return send(res, 200, { users: db.users.map(publicUser), roles: Object.keys(ROLES) });
+    if (m === 'GET' && p === '/api/admin/audit') return send(res, 200, { log: store.auditList(400) });
 
     if (m === 'POST' && p === '/api/admin/users/import') {
       // كل سطر: اسم + إيميل (بأي ترتيب، مفصولين بفاصلة أو Tab من الإكسل)، أو إيميل بس
       const lines = String(body.text || '').split(/\r?\n/).map((l) => l.trim()).filter(Boolean).slice(0, 3000);
       const created = [];
       const skipped = [];
+      const role = ROLES[body.role] ? body.role : 'employee';
       for (const line of lines) {
         const parts = line.split(/[\t,،;]+/).map((x) => x.trim().replace(/^<|>$/g, '')).filter(Boolean);
         const email = parts.find((x) => EMAIL_RE.test(x))?.toLowerCase();
@@ -677,11 +719,12 @@ async function api(req, res, url) {
         if (db.users.some((u) => u.email === email)) { skipped.push({ line, reason: 'الحساب موجود من قبل' }); continue; }
         const name = str(parts.filter((x) => x.toLowerCase() !== email).join(' '), 80) || nameFromEmail(email);
         const password = makePassword();
-        const u = { id: id(), name, email, username: makeUsername(email), pass: hashPassword(password), isAdmin: false, createdAt: now() };
+        const u = { id: id(), name, email, username: makeUsername(email), pass: hashPassword(password), role, createdAt: now() };
         db.users.push(u);
         created.push({ name, email, username: u.username, password });
       }
       save();
+      if (created.length) audit(user, 'إنشاء حسابات', `${created.length} حساب بصلاحية ${role}`);
       return send(res, 200, { created, skipped });
     }
 
@@ -694,24 +737,28 @@ async function api(req, res, url) {
         target.pass = hashPassword(password);
         endSessions(target.id);
         save();
+        audit(user, 'كلمة مرور جديدة', target.username);
         return send(res, 200, { name: target.name, email: target.email, username: target.username, password });
       }
       if (m === 'PUT' && !us[2]) {
         const name = str(body.name, 80);
         need(name, 'اكتب اسم صاحب الحساب');
-        const makeAdmin = !!body.isAdmin;
-        need(makeAdmin || !target.isAdmin || db.users.filter((u) => u.isAdmin).length > 1, 'لازم يبقى مدير واحد على الأقل');
+        const role = body.role || target.role;
+        need(ROLES[role], 'صلاحية غير معروفة');
+        need(role === 'admin' || target.role !== 'admin' || admins().length > 1, 'لازم يبقى مدير نظام واحد على الأقل');
+        if (role !== target.role) audit(user, 'تغيير صلاحية', `${target.username}: ${target.role} ← ${role}`);
         target.name = name;
-        target.isAdmin = makeAdmin;
+        target.role = role;
         save(); broadcast();
         return send(res, 200, { ok: true });
       }
       if (m === 'DELETE' && !us[2]) {
         need(target.id !== user.id, 'ما تقدر تحذف حسابك وأنت داخل فيه');
-        need(!target.isAdmin || db.users.filter((u) => u.isAdmin).length > 1, 'لازم يبقى مدير واحد على الأقل');
+        need(target.role !== 'admin' || admins().length > 1, 'لازم يبقى مدير نظام واحد على الأقل');
         db.users = db.users.filter((u) => u !== target);
         endSessions(target.id);
         save();
+        audit(user, 'حذف حساب', target.username);
         return send(res, 200, { ok: true });
       }
     }
@@ -742,7 +789,7 @@ function serveStatic(req, res, url) {
     const photo = db.photos.find((x) => x.url === rel);
     const viewer = currentUser(req);
     const visible = rel === db.issue.logo || (photo && (photo.approved || photo.id === db.featuredPhotoId)) || (!photo && viewer);
-    if (!visible && !viewer?.isAdmin) { res.writeHead(404); return res.end(); }
+    if (!visible && !can(viewer, 'content')) { res.writeHead(404); return res.end(); }
     root = UPLOAD_DIR;
     rel = rel.slice('/uploads'.length);
   }

@@ -9,6 +9,6 @@
     "build:single": "node tools/build-single.js"
   },
   "engines": {
-    "node": ">=18"
+    "node": ">=22.13"
   }
 }

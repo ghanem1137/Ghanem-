@@ -9,6 +9,22 @@
   const WEATHER_API = 'https://api.open-meteo.com';
   const GEO_API = 'https://geocoding-api.open-meteo.com';
 
+  // الأدوار والصلاحيات (نفس تعريف server.js)
+  const ROLES = {
+    admin: ['view', 'participate', 'moderate', 'content', 'users', 'settings'],
+    editor: ['view', 'participate', 'moderate', 'content'],
+    moderator: ['view', 'participate', 'moderate'],
+    employee: ['view', 'participate'],
+    viewer: ['view'],
+  };
+  const can = (user, perm) => !!user && (ROLES[user.role] || []).includes(perm);
+  const AKEY = 'weekend-saeed-audit';
+  function audit(user, action, details = '') {
+    let log = [];
+    try { log = JSON.parse(localStorage.getItem(AKEY)) || []; } catch { /* تجاهل */ }
+    log.unshift({ at: new Date().toISOString(), user_id: user?.id, user_name: user?.name || '', role: user?.role || '', action, details: String(details).slice(0, 500) });
+    try { localStorage.setItem(AKEY, JSON.stringify(log.slice(0, 400))); } catch { /* تجاهل */ }
+  }
   const rid = () => Array.from(crypto.getRandomValues(new Uint8Array(6)), (b) => b.toString(16).padStart(2, '0')).join('');
   const now = () => new Date().toISOString();
   const str = (v, max = 500) => String(v ?? '').trim().slice(0, max);
@@ -81,7 +97,7 @@
       recommendations: [], creative: [], selfdev: [], occasions: [],
       quiz: { id: rid(), question: '', hint: '', accepted: [], prize: '', closed: false, winner: null, answers: [] },
       photos: [], featuredPhotoId: null, likes: {}, comments: [], suggestions: [],
-      users: [{ id: rid(), name: 'مدير النشرة', email: '', username: 'admin', pass: await hashPassword('weekend123'), isAdmin: true, createdAt: now() }],
+      users: [{ id: rid(), name: 'مدير النشرة', email: '', username: 'admin', pass: await hashPassword('weekend123'), role: 'admin', createdAt: now() }],
     };
   }
 
@@ -91,6 +107,7 @@
     try { db = JSON.parse(ls.get(KEY)); } catch { db = null; }
     if (!db) { db = await seed(); persist(); }
     db.sections = normalizeSections(db.sections);
+    for (const u of db.users) { if (!ROLES[u.role]) u.role = u.isAdmin ? 'admin' : 'employee'; delete u.isAdmin; }
     if (!db.issue.logo && !db.issue.logoRemoved) db.issue.logo = DEFAULT_LOGO;
   }
   function persist() {
@@ -120,7 +137,8 @@
   const need = (c, msg, status = 400) => { if (!c) throw err(status, msg); };
   const normalizeArabic = (s) => str(s, 200).replace(/[ً-ْـ]/g, '').replace(/[أإآ]/g, 'ا').replace(/ة/g, 'ه').replace(/ى/g, 'ي').replace(/\s+/g, ' ').toLowerCase();
   const EMAIL_RE = /^[^\s@,;<>"']+@[^\s@,;<>"']+\.[^\s@,;<>"']+$/;
-  const publicUser = (u) => ({ id: u.id, name: u.name, email: u.email, username: u.username, isAdmin: !!u.isAdmin, createdAt: u.createdAt, lastLogin: u.lastLogin || null });
+  const publicUser = (u) => ({ id: u.id, name: u.name, email: u.email, username: u.username, role: u.role, createdAt: u.createdAt, lastLogin: u.lastLogin || null });
+  const admins = () => db.users.filter((u) => u.role === 'admin');
   const LIST = {
     matches: ['league', 'home', 'away', 'day', 'time', 'channel', 'stadium', 'size'],
     recommendations: ['category', 'title', 'colleague', 'itemName', 'description', 'location', 'link', 'size'],
@@ -187,7 +205,7 @@
     for (const [t, arr] of Object.entries(db.likes)) likes[t] = { count: arr.length, mine: arr.includes(user.id) };
     const { accepted, answers, ...quiz } = db.quiz;
     return {
-      me: { id: user.id, name: user.name, username: user.username, isAdmin: !!user.isAdmin },
+      me: { id: user.id, name: user.name, username: user.username, role: user.role, perms: ROLES[user.role] || [], isAdmin: user.role === 'admin' },
       issue: db.issue, sections: db.sections, weatherCity: db.weather.enabled ? db.weather.city : null,
       matches: db.matches, poll: { ...db.poll, votes: undefined, counts, myVote: db.poll.votes[user.id] || null },
       recommendations: db.recommendations, creative: db.creative, selfdev: db.selfdev, occasions: db.occasions,
@@ -206,7 +224,8 @@
       const u = db.users.find((x) => x.username === login || (x.email && x.email.toLowerCase() === login));
       need(u && await checkPassword(String(body.password || ''), u.pass), 'اسم المستخدم أو كلمة المرور غير صحيحة', 401);
       u.lastLogin = now(); save(); ls.set(SKEY, u.id);
-      return { ok: true, isAdmin: !!u.isAdmin };
+      audit(u, 'دخول');
+      return { ok: true, role: u.role };
     }
     if (m === 'POST' && p === '/api/logout') { ls.del(SKEY); return { ok: true }; }
     if (m === 'GET' && p === '/api/brand') { const { title, orgName, orgNameEn, logo } = db.issue; return { title, orgName, orgNameEn, logo }; }
@@ -216,6 +235,8 @@
 
     if (m === 'GET' && p === '/api/state') return publicState(user);
     if (m === 'GET' && p === '/api/weather') return { weather: await getWeather() };
+    const PARTICIPATE = ['/api/poll/vote', '/api/like', '/api/comments', '/api/quiz/answer', '/api/photos', '/api/suggestions'];
+    if (m === 'POST' && PARTICIPATE.includes(p)) need(can(user, 'participate'), 'حسابك للاطلاع فقط', 403);
 
     if (m === 'POST' && p === '/api/me/password') {
       need(await checkPassword(String(body.current || ''), user.pass), 'كلمة المرور الحالية غير صحيحة');
@@ -243,7 +264,8 @@
     let mm = /^\/api\/comments\/(\w+)$/.exec(p);
     if (m === 'DELETE' && mm) {
       const c = db.comments.find((x) => x.id === mm[1]);
-      need(c && (c.userId === user.id || user.isAdmin), 'ما تقدر تحذف هذا التعليق', 403);
+      need(c && ((c.userId === user.id && can(user, 'participate')) || can(user, 'moderate')), 'ما تقدر تحذف هذا التعليق', 403);
+      if (c.userId !== user.id) audit(user, 'حذف تعليق', `${c.name}: ${c.text}`);
       db.comments = db.comments.filter((x) => x !== c); save(); broadcast(); return { ok: true };
     }
     if (m === 'POST' && p === '/api/quiz/answer') {
@@ -267,14 +289,20 @@
     }
 
     if (p.startsWith('/api/admin/')) {
-      need(user.isAdmin, 'هذي الصفحة لفريق النشرة فقط', 403);
+      need(can(user, 'content'), 'ما عندك صلاحية لهذي العملية', 403);
+      const isUsers = p.startsWith('/api/admin/users') || p === '/api/admin/audit';
+      need(!isUsers || can(user, 'users'), 'إدارة الحسابات لمدير النظام فقط', 403);
+      need(p !== '/api/admin/logo' || can(user, 'settings'), 'تغيير هوية الجهة لمدير النظام فقط', 403);
+      if (m !== 'GET' && !isUsers) audit(user, 'تعديل المحتوى', p.replace('/api/admin/', ''));
+      if (m === 'GET' && p === '/api/admin/audit') { let log = []; try { log = JSON.parse(localStorage.getItem(AKEY)) || []; } catch { /* تجاهل */ } return { log }; }
       if (m === 'GET' && p === '/api/admin/data') return { suggestions: db.suggestions, quiz: db.quiz, photos: db.photos, poll: db.poll, weather: db.weather };
       mm = /^\/api\/admin\/section\/(\w+)$/.exec(p);
       if (m === 'PUT' && mm) {
         const key = mm[1];
         if (LIST[key]) { need(Array.isArray(body.items), 'بيانات غير صالحة'); db[key] = body.items.slice(0, 50).map((it) => cleanItem(LIST[key], it || {})); }
         else if (key === 'issue') {
-          for (const f of ['title', 'greeting', 'dateFrom', 'dateTo', 'quote', 'footer', 'orgName', 'orgNameEn']) db.issue[f] = str(body[f], 1000);
+          for (const f of ['title', 'greeting', 'dateFrom', 'dateTo', 'quote', 'footer']) db.issue[f] = str(body[f], 1000);
+          if (can(user, 'settings')) for (const f of ['orgName', 'orgNameEn']) db.issue[f] = str(body[f], 1000);
           const site = str(body.siteUrl, 300).replace(/\/+$/, '');
           need(!site || /^https?:\/\/\S+$/.test(site), 'رابط المنصة لازم يبدأ بـ http:// أو https://');
           db.issue.siteUrl = site; db.issue.number = Math.max(1, parseInt(body.number, 10) || 1);
@@ -360,9 +388,10 @@
         else { const s = db.suggestions.find((x) => x.id === mm[1]); if (s) s.done = !s.done; }
         save(); broadcast(); return { ok: true };
       }
-      if (m === 'GET' && p === '/api/admin/users') return { users: db.users.map(publicUser) };
+      if (m === 'GET' && p === '/api/admin/users') return { users: db.users.map(publicUser), roles: Object.keys(ROLES) };
       if (m === 'POST' && p === '/api/admin/users/import') {
         const created = []; const skipped = [];
+        const role = ROLES[body.role] ? body.role : 'employee';
         for (const line of String(body.text || '').split(/\r?\n/).map((l) => l.trim()).filter(Boolean).slice(0, 3000)) {
           const parts = line.split(/[\t,،;]+/).map((x) => x.trim().replace(/^<|>$/g, '')).filter(Boolean);
           const email = parts.find((x) => EMAIL_RE.test(x))?.toLowerCase();
@@ -370,10 +399,12 @@
           if (db.users.some((u) => u.email === email)) { skipped.push({ line, reason: 'الحساب موجود من قبل' }); continue; }
           const name = str(parts.filter((x) => x.toLowerCase() !== email).join(' '), 80) || nameFromEmail(email);
           const password = makePassword();
-          const u = { id: rid(), name, email, username: makeUsername(email), pass: await hashPassword(password), isAdmin: false, createdAt: now() };
+          const u = { id: rid(), name, email, username: makeUsername(email), pass: await hashPassword(password), role, createdAt: now() };
           db.users.push(u); created.push({ name, email, username: u.username, password });
         }
-        save(); return { created, skipped };
+        save();
+        if (created.length) audit(user, 'إنشاء حسابات', `${created.length} حساب بصلاحية ${role}`);
+        return { created, skipped };
       }
       mm = /^\/api\/admin\/users\/(\w+)(\/reset)?$/.exec(p);
       if (mm) {
@@ -385,12 +416,16 @@
         }
         if (m === 'PUT') {
           need(str(body.name, 80), 'اكتب اسم صاحب الحساب');
-          need(body.isAdmin || !t.isAdmin || db.users.filter((u) => u.isAdmin).length > 1, 'لازم يبقى مدير واحد على الأقل');
-          t.name = str(body.name, 80); t.isAdmin = !!body.isAdmin; save(); broadcast(); return { ok: true };
+          const role = body.role || t.role;
+          need(ROLES[role], 'صلاحية غير معروفة');
+          need(role === 'admin' || t.role !== 'admin' || admins().length > 1, 'لازم يبقى مدير نظام واحد على الأقل');
+          if (role !== t.role) audit(user, 'تغيير صلاحية', `${t.username}: ${t.role} ← ${role}`);
+          t.name = str(body.name, 80); t.role = role; save(); broadcast(); return { ok: true };
         }
         if (m === 'DELETE') {
           need(t.id !== user.id, 'ما تقدر تحذف حسابك وأنت داخل فيه');
-          need(!t.isAdmin || db.users.filter((u) => u.isAdmin).length > 1, 'لازم يبقى مدير واحد على الأقل');
+          need(t.role !== 'admin' || admins().length > 1, 'لازم يبقى مدير نظام واحد على الأقل');
+          audit(user, 'حذف حساب', t.username);
           db.users = db.users.filter((u) => u !== t); save(); return { ok: true };
         }
       }

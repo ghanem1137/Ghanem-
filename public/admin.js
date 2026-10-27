@@ -22,6 +22,9 @@ const sizeOpts = () => SIZE_LABELS;
 const WIDTH_LABELS = { quarter: 'ربع الصفحة', third: 'ثلث الصفحة', half: 'نص الصفحة', full: 'الصفحة كاملة' };
 const widthSelect = (id, value) => `<select ${id}>${Object.entries(WIDTH_LABELS).map(([k, v]) => `<option value="${k}" ${k === (value || 'full') ? 'selected' : ''}>${v}</option>`).join('')}</select>`;
 
+const roleSelect = (name, value) => `<select name="${name}" style="width:auto">${Object.entries(ROLE_LABELS).map(([k, v]) => `<option value="${k}" ${k === value ? 'selected' : ''}>${v}</option>`).join('')}</select>`;
+let auditLog = [];
+
 // ---------- المرفقات الاختيارية (صورة و/أو مستند) ----------
 function attachField(it) {
   const img = it.image || '';
@@ -126,7 +129,7 @@ const LIST_SCHEMAS = {
 const TABS = {
   issue: '📰 العدد', sections: '🗂️ ترتيب الأقسام وعناوينها', users: '👥 الموظفين', matches: '⚽ المباريات', poll: '🔮 الاستطلاع', recommendations: '💡 التوصيات',
   lens: '📸 عدسة الموظف', creative: '✍️ الإبداع', selfdev: '🌱 تطوير الذات', occasions: '🎉 المناسبات',
-  quiz: '🧩 المسابقة', box: '📮 الصندوق', comments: '💬 التعليقات', email: '📧 نسخة الإيميل',
+  quiz: '🧩 المسابقة', box: '📮 الصندوق', comments: '💬 التعليقات', email: '📧 نسخة الإيميل', audit: '📜 سجل العمليات',
 };
 
 // ---------- عناصر مساعدة ----------
@@ -227,7 +230,7 @@ const views = {
       ${field('greeting', 'كلمة الترحيب', 'textarea', i.greeting)}
       ${field('quote', 'اقتباس الأسبوع (يطلع في آخر الصفحة)', 'text', i.quote)}
       ${field('footer', 'سطر نهاية الصفحة', 'text', i.footer)}
-      <h3 style="margin-top:10px">🏛️ هوية الجهة</h3>
+      ${canDo(pub.me, 'settings') ? `<h3 style="margin-top:10px">🏛️ هوية الجهة</h3>
       <div class="row">${field('orgName', 'اسم الجهة', 'text', i.orgName)}${field('orgNameEn', 'اسم الجهة بالإنجليزي', 'text', i.orgNameEn)}</div>
       <div class="logo-row">
         ${i.logo ? `<img src="${esc(i.logo)}" alt="الشعار الحالي">` : '<span class="muted">ما فيه شعار مرفوع</span>'}
@@ -236,7 +239,7 @@ const views = {
         ${i.logo !== '/logo.png' ? '<button type="button" class="pill" id="logo-reset">استعادة الشعار الأساسي</button>' : ''}
       </div>
       ${field('siteUrl', 'رابط المنصة للموظفين (يُستخدم في QR والإيميلات)، مثل http://192.168.1.25:3000', 'url', i.siteUrl)}
-      <p class="muted small">إذا تركته فاضي نستخدم الرابط اللي فاتح منه الحين: <span class="cred">${esc(location.origin)}</span></p>
+      <p class="muted small">إذا تركته فاضي نستخدم الرابط اللي فاتح منه الحين: <span class="cred">${esc(location.origin)}</span></p>` : ''}
       <button class="btn">💾 حفظ ونشر</button></form>`;
   },
   sections() {
@@ -294,16 +297,18 @@ const views = {
         <label>الصق القائمة هنا: كل سطر فيه اسم الموظف وإيميله (تقدر تنسخ عمودين من الإكسل مباشرة)
           <textarea name="text" rows="6" dir="auto" placeholder="أحمد محمد, ahmed.m@company.com&#10;سارة علي, sara.ali@company.com"></textarea></label>
         <p class="muted small">اسم المستخدم يتكوّن من أول الإيميل (قبل @)، والموظف يقدر يدخل بالإيميل كامل بعد. إذا ما فيه اسم نأخذه من الإيميل وتقدر تعدّله تحت.</p>
+        <label>صلاحية الحسابات الجديدة ${roleSelect('role', 'employee')}</label>
         <button class="btn">إنشاء الحسابات</button>
       </form>
+      <div class="roles-legend">${Object.keys(ROLE_LABELS).map((r) => `<div><b>${ROLE_LABELS[r]}</b><span class="muted small">${ROLE_HINTS[r]}</span></div>`).join('')}</div>
       ${credsBox}
       <h3 style="margin-top:24px">👥 الحسابات (${users.length})</h3>
       <input id="user-search" placeholder="🔍 ابحث بالاسم أو الإيميل" style="margin:8px 0">
-      <div class="table-wrap"><table class="table" id="users-table"><tr><th>الاسم</th><th>الإيميل</th><th>اسم المستخدم</th><th>مدير</th><th>آخر دخول</th><th></th></tr>
+      <div class="table-wrap"><table class="table" id="users-table"><tr><th>الاسم</th><th>الإيميل</th><th>اسم المستخدم</th><th>الصلاحية</th><th>آخر دخول</th><th></th></tr>
       ${users.map((u) => `<tr data-uid="${u.id}" data-search="${esc((u.name + ' ' + u.email + ' ' + u.username).toLowerCase())}">
         <td><input name="name" value="${esc(u.name)}" style="min-width:140px"></td>
         <td class="cred">${esc(u.email)}</td><td class="cred">${esc(u.username)}</td>
-        <td><input type="checkbox" name="isAdmin" ${u.isAdmin ? 'checked' : ''} style="width:auto"></td>
+        <td>${roleSelect('role', u.role)}</td>
         <td class="muted small">${u.lastLogin ? timeAgo(u.lastLogin) : 'ما دخل بعد'}</td>
         <td class="actions"><button class="pill" data-uop="save">💾</button><button class="pill" data-uop="reset">🔑 كلمة مرور جديدة</button>
           ${u.id === pub.me.id ? '' : '<button class="pill" data-uop="delete">🗑️</button>'}</td></tr>`).join('')}
@@ -387,9 +392,18 @@ const views = {
   },
   comments() {
     const list = [...pub.comments].reverse();
-    return `<table class="table"><tr><th>الاسم</th><th>التعليق</th><th>الوقت</th><th></th></tr>
-    ${list.map((c) => `<tr><td>${esc(c.name)}</td><td>${esc(c.text)}</td><td class="muted">${timeAgo(c.createdAt)}</td>
+    return `<p class="notice">🛡️ هنا كل تعليقات الموظفين، الأحدث أول. احذف أي تعليق مخالف، والحذف ينسجّل في سجل العمليات.</p>
+    <input id="comment-search" placeholder="🔍 ابحث في التعليقات أو بالاسم" style="margin:10px 0">
+    <table class="table" id="comments-table"><tr><th>الاسم</th><th>التعليق</th><th>الوقت</th><th></th></tr>
+    ${list.map((c) => `<tr data-search="${esc((c.name + ' ' + c.text).toLowerCase())}"><td>${esc(c.name)}</td><td>${esc(c.text)}</td><td class="muted">${timeAgo(c.createdAt)}</td>
       <td><button class="pill" data-cdel="${c.id}">🗑️ حذف</button></td></tr>`).join('') || '<tr><td colspan="4" class="muted">ما فيه تعليقات.</td></tr>'}</table>`;
+  },
+  audit() {
+    return `<p class="notice">📜 سجل بكل العمليات المهمة: الدخول، تعديل المحتوى، حذف التعليقات، وتغيير الحسابات والصلاحيات. السجل ما ينحذف ولا ينعدّل.</p>
+      <div class="table-wrap" style="margin-top:12px"><table class="table"><tr><th>الوقت</th><th>المستخدم</th><th>الصلاحية</th><th>العملية</th><th>التفاصيل</th></tr>
+      ${auditLog.map((r) => `<tr><td class="muted small" style="white-space:nowrap">${esc(new Date(r.at).toLocaleString('ar-SA-u-ca-gregory', { dateStyle: 'short', timeStyle: 'short', timeZone: 'Asia/Riyadh' }))}</td>
+        <td>${esc(r.user_name)}</td><td class="small">${esc(ROLE_LABELS[r.role] || r.role)}</td><td>${esc(r.action)}</td><td class="small" style="overflow-wrap:anywhere">${esc(r.details)}</td></tr>`).join('')
+        || '<tr><td colspan="5" class="muted">ما فيه عمليات بعد.</td></tr>'}</table></div>`;
   },
 };
 
@@ -420,8 +434,11 @@ const CONTENT_HINT = {
 };
 // أسماء التبويبات تتبع عناوين الأقسام وترتيبها في الصفحة
 function tabOrder() {
+  // المراقب يشوف التعليقات بس، والمحرر كل شي ما عدا الحسابات وسجل العمليات
+  if (!canDo(pub.me, 'content')) return ['comments'];
   const secTabs = pub.sections.map((x) => SECTION_TAB[x.key]).filter(Boolean);
-  return ['issue', 'sections', ...secTabs, 'users', 'comments', 'email'];
+  const adminTabs = canDo(pub.me, 'users') ? ['users', 'audit'] : [];
+  return ['issue', 'sections', ...secTabs, ...adminTabs, 'comments', 'email'];
 }
 function tabLabel(k) {
   const sec = pub.sections.find((x) => x.key === TAB_SECTION[k]);
@@ -537,6 +554,12 @@ function renderTab() {
   if (tab === 'sections') return bindSections();
   if (tab === 'issue') bindLogo();
   if (tab === 'lens') bindPhotoAdd();
+  if (tab === 'comments') {
+    $('#comment-search').addEventListener('input', (e) => {
+      const q = e.target.value.trim().toLowerCase();
+      document.querySelectorAll('#comments-table tr[data-search]').forEach((tr) => { tr.hidden = q && !tr.dataset.search.includes(q); });
+    });
+  }
   if (tab === 'users') return bindUsers();
   if (tab === 'email') return bindEmail();
   const f = $('#f');
@@ -686,6 +709,7 @@ function readLogo(file) {
 }
 
 function bindLogo() {
+  if (!$('#logo-file')) return; // هوية الجهة تظهر لمدير النظام فقط
   $('#logo-file').onchange = async (e) => {
     if (!e.target.files[0]) return;
     try {
@@ -736,7 +760,7 @@ function bindUsers() {
     const btn = $('button', e.target);
     btn.disabled = true;
     try {
-      const { created, skipped } = await adminApi('/api/admin/users/import', { method: 'POST', body: { text: e.target.text.value } });
+      const { created, skipped } = await adminApi('/api/admin/users/import', { method: 'POST', body: { text: e.target.text.value, role: e.target.role.value } });
       lastCreds = [...created, ...lastCreds];
       await load();
       toast(`تم إنشاء ${created.length} حساب${skipped.length ? ` · تم تخطّي ${skipped.length}` : ''}`);
@@ -756,7 +780,7 @@ function bindUsers() {
     const u = users.find((x) => x.id === uid);
     try {
       if (b.dataset.uop === 'save') {
-        await adminApi(`/api/admin/users/${uid}`, { method: 'PUT', body: { name: $('[name=name]', tr).value, isAdmin: $('[name=isAdmin]', tr).checked } });
+        await adminApi(`/api/admin/users/${uid}`, { method: 'PUT', body: { name: $('[name=name]', tr).value, role: $('[name=role]', tr).value } });
         toast('تم الحفظ ✅');
       } else if (b.dataset.uop === 'reset') {
         if (!confirm(`نعمل كلمة مرور جديدة لـ ${u.name}؟ القديمة بتوقف على طول.`)) return;
@@ -909,8 +933,15 @@ async function bindEmail() {
 // ---------- التحميل ----------
 
 async function load() {
-  [pub, priv, { users }] = await Promise.all([api('/api/state'), adminApi('/api/admin/data'), adminApi('/api/admin/users')]);
-  if (!TABS[tab]) tab = 'issue';
+  pub = await api('/api/state');
+  if (!canDo(pub.me, 'content') && !canDo(pub.me, 'moderate')) throw new Error('هذي الصفحة لفريق النشرة فقط');
+  // بيانات الإدارة حسب الصلاحية: المراقب يكفيه التعليقات اللي في الحالة العامة
+  priv = canDo(pub.me, 'content') ? await adminApi('/api/admin/data') : { suggestions: [], photos: [], quiz: {}, poll: {}, weather: {} };
+  if (canDo(pub.me, 'users')) {
+    [{ users }, { log: auditLog }] = await Promise.all([adminApi('/api/admin/users'), adminApi('/api/admin/audit')]);
+  }
+  $('.admin-bar h2').textContent = canDo(pub.me, 'content') ? '🛠️ إدارة ويكند سعيد' : '🛡️ مراجعة التعليقات';
+  if (!tabOrder().includes(tab)) tab = tabOrder()[0];
   $('#panel').hidden = false;
   $('#denied').hidden = true;
   renderTab();
@@ -925,7 +956,8 @@ function connect() {
     clearTimeout(liveTimer);
     liveTimer = setTimeout(async () => {
       try {
-        [pub, priv] = await Promise.all([api('/api/state'), adminApi('/api/admin/data')]);
+        pub = await api('/api/state');
+        if (canDo(pub.me, 'content')) priv = await adminApi('/api/admin/data');
         if (LIVE_TABS.includes(tab)) renderTab();
         else renderTabsBar();
       } catch { /* نحاول مع التحديث الجاي */ }
