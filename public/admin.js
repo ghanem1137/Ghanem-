@@ -24,6 +24,7 @@ const widthSelect = (id, value) => `<select ${id}>${Object.entries(WIDTH_LABELS)
 
 const roleSelect = (name, value) => `<select name="${name}" style="width:auto">${Object.entries(ROLE_LABELS).map(([k, v]) => `<option value="${k}" ${k === value ? 'selected' : ''}>${v}</option>`).join('')}</select>`;
 let auditLog = [];
+let resets = []; // طلبات "نسيت كلمة المرور"
 
 // ---------- المرفقات الاختيارية (صورة و/أو مستند) ----------
 function attachField(it) {
@@ -292,6 +293,14 @@ const views = {
         </table></div>
       </div>` : '';
     return `
+      ${resets.length ? `<div class="card reset-req" id="reset-requests">
+        <h3>🔑 طلبات "نسيت كلمة المرور" <span class="badge-red">${resets.length}</span></h3>
+        <p class="muted small">اضغط "كلمة مرور جديدة"، وبعدها أرسلها للموظف بزر "✉️ أرسل بأوتلوك" اللي يطلع تحت.</p>
+        <div class="table-wrap"><table class="table"><tr><th>الاسم</th><th>اسم المستخدم</th><th>الإيميل</th><th>وقت الطلب</th><th></th></tr>
+        ${resets.map((r) => `<tr><td>${esc(r.name)}</td><td class="cred">${esc(r.username)}</td><td class="cred">${esc(r.email)}</td><td class="muted small">${timeAgo(r.at)}</td>
+          <td class="actions"><button class="btn sm" data-rreset="${r.userId}">🔑 كلمة مرور جديدة</button><button class="pill" data-rdismiss="${r.id}">تجاهل</button></td></tr>`).join('')}
+        </table></div>
+      </div>` : ''}
       <form class="form" id="f-import">
         <h3>➕ إضافة موظفين</h3>
         <label>الصق القائمة هنا: كل سطر فيه اسم الموظف وإيميله (تقدر تنسخ عمودين من الإكسل مباشرة)
@@ -537,7 +546,8 @@ function renderTabsBar() {
   $('#tabs').innerHTML = tabOrder().map((k) => {
     const v = tabLabel(k);
     const badge = k === 'box' ? priv.suggestions.filter((s) => !s.done).length
-      : k === 'lens' ? priv.photos.filter((p) => !p.approved).length : 0;
+      : k === 'lens' ? priv.photos.filter((p) => !p.approved).length
+      : k === 'users' ? priv.resetCount || 0 : 0;
     const sec = pub.sections.find((x) => x.key === TAB_SECTION[k]);
     const off = sec && !sec.visible;
     return `<button class="${k === tab ? 'on' : ''} ${off ? 'off' : ''}" data-tab="${k}" ${off ? 'title="القسم مخفي عن الموظفين"' : ''}>${v}${badge ? ` (${badge})` : ''}</button>`;
@@ -755,6 +765,20 @@ function credsCsv(list) {
 }
 
 function bindUsers() {
+  $('#reset-requests')?.addEventListener('click', async (e) => {
+    const b = e.target.closest('[data-rreset], [data-rdismiss]');
+    if (!b) return;
+    try {
+      if (b.dataset.rreset) {
+        const c = await adminApi(`/api/admin/users/${b.dataset.rreset}/reset`, { method: 'POST' });
+        lastCreds = [c, ...lastCreds.filter((x) => x.username !== c.username)];
+        toast('تم إنشاء كلمة مرور جديدة، أرسلها للموظف من الجدول ✅');
+      } else {
+        await adminApi(`/api/admin/resets/${b.dataset.rdismiss}`, { method: 'DELETE' });
+      }
+      await load();
+    } catch (err) { toast(err.message, true); }
+  });
   $('#f-import').onsubmit = async (e) => {
     e.preventDefault();
     const btn = $('button', e.target);
@@ -938,7 +962,9 @@ async function load() {
   // بيانات الإدارة حسب الصلاحية: المراقب يكفيه التعليقات اللي في الحالة العامة
   priv = canDo(pub.me, 'content') ? await adminApi('/api/admin/data') : { suggestions: [], photos: [], quiz: {}, poll: {}, weather: {} };
   if (canDo(pub.me, 'users')) {
-    [{ users }, { log: auditLog }] = await Promise.all([adminApi('/api/admin/users'), adminApi('/api/admin/audit')]);
+    const [ud, al] = await Promise.all([adminApi('/api/admin/users'), adminApi('/api/admin/audit')]);
+    ({ users, resets } = ud);
+    auditLog = al.log;
   }
   $('.admin-bar h2').textContent = canDo(pub.me, 'content') ? '🛠️ إدارة ويكند سعيد' : '🛡️ مراجعة التعليقات';
   if (!tabOrder().includes(tab)) tab = tabOrder()[0];

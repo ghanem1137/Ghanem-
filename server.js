@@ -94,6 +94,7 @@ function seed() {
     suggestions: [],
     users: [],      // {id, name, email, username, pass, role, createdAt, lastLogin}
     sessions: {},   // sha256(token) -> {userId, exp}
+    resetRequests: [], // طلبات "نسيت كلمة المرور" {id, userId, at, ip}
   };
 }
 
@@ -180,6 +181,20 @@ if (!admins().length) {
   if (!process.env.ADMIN_PASSWORD) console.log('⚠️  كلمة المرور الافتراضية weekend123 — غيّرها من المنصة بعد أول دخول');
 }
 saveNow();
+// لفريق تقنية المعلومات: إذا مدير النظام نسي كلمة المرور
+//   node server.js --reset-admin            (كلمة مرور عشوائية تطلع في الشاشة)
+//   ADMIN_PASSWORD=... node server.js --reset-admin
+if (process.argv.includes('--reset-admin')) {
+  const admin = db.users.find((u) => u.username === 'admin') || admins()[0];
+  const password = process.env.ADMIN_PASSWORD || makePassword(12);
+  admin.pass = hashPassword(password);
+  endSessions(admin.id);
+  saveNow();
+  audit({ name: 'سطر الأوامر', role: 'system' }, 'إعادة كلمة مرور مدير النظام', admin.username);
+  console.log(`✅ تم تعيين كلمة مرور جديدة للحساب ${admin.username}: ${password}`);
+  process.exit(0);
+}
+
 if (migratedFromJson) {
   fs.renameSync(OLD_JSON, OLD_JSON + '.migrated');
   console.log('✅ انتقلت بيانات النسخة السابقة إلى قاعدة البيانات data/weekend.db');
@@ -458,6 +473,22 @@ async function api(req, res, url) {
     return send(res, 200, { ok: true, role: user.role });
   }
 
+  // نسيت كلمة المرور: الطلب يوصل لمدير النظام، والرد واحد دائماً عشان ما ينكشف وش الحسابات الموجودة
+  if (m === 'POST' && p === '/api/forgot') {
+    const ip = req.socket.remoteAddress;
+    need(!tooManyFailures(ip), 'محاولات كثيرة، جرّب بعد ربع ساعة', 429);
+    noteFailure(ip);
+    const body = await readBody(req, 16 * 1024);
+    const login = str(body.login, 200).toLowerCase();
+    const target = login && db.users.find((u) => u.username === login || (u.email && u.email.toLowerCase() === login));
+    if (target && !db.resetRequests.some((r) => r.userId === target.id)) {
+      db.resetRequests.push({ id: id(), userId: target.id, at: now(), ip });
+      audit(target, 'طلب إعادة كلمة المرور');
+      save(); broadcast();
+    }
+    return send(res, 200, { ok: true });
+  }
+
   if (m === 'POST' && p === '/api/logout') {
     const t = parseCookies(req).wk_session;
     if (t) { delete db.sessions[tokenKey(t)]; save(); }
@@ -580,7 +611,10 @@ async function api(req, res, url) {
     if (m !== 'GET' && !isUsers) audit(user, 'تعديل المحتوى', p.replace('/api/admin/', ''));
 
     if (m === 'GET' && p === '/api/admin/data') {
-      return send(res, 200, { suggestions: db.suggestions, quiz: db.quiz, photos: db.photos, poll: db.poll, weather: db.weather });
+      return send(res, 200, {
+        suggestions: db.suggestions, quiz: db.quiz, photos: db.photos, poll: db.poll, weather: db.weather,
+        resetCount: can(user, 'users') ? db.resetRequests.length : 0,
+      });
     }
 
     const sec = /^\/api\/admin\/section\/(\w+)$/.exec(p);
@@ -703,7 +737,17 @@ async function api(req, res, url) {
     }
 
     // --- حسابات الموظفين ---
-    if (m === 'GET' && p === '/api/admin/users') return send(res, 200, { users: db.users.map(publicUser), roles: Object.keys(ROLES) });
+    if (m === 'GET' && p === '/api/admin/users') {
+      const resets = db.resetRequests.map((r) => ({ ...r, user: db.users.find((u) => u.id === r.userId) })).filter((r) => r.user)
+        .map((r) => ({ id: r.id, at: r.at, userId: r.userId, name: r.user.name, username: r.user.username, email: r.user.email }));
+      return send(res, 200, { users: db.users.map(publicUser), roles: Object.keys(ROLES), resets });
+    }
+    const rs = /^\/api\/admin\/resets\/(\w+)$/.exec(p);
+    if (m === 'DELETE' && rs) {
+      db.resetRequests = db.resetRequests.filter((r) => r.id !== rs[1]);
+      save();
+      return send(res, 200, { ok: true });
+    }
     if (m === 'GET' && p === '/api/admin/audit') return send(res, 200, { log: store.auditList(400) });
 
     if (m === 'POST' && p === '/api/admin/users/import') {
@@ -737,6 +781,7 @@ async function api(req, res, url) {
         target.pass = hashPassword(password);
         endSessions(target.id);
         save();
+        db.resetRequests = db.resetRequests.filter((r) => r.userId !== target.id);
         audit(user, 'كلمة مرور جديدة', target.username);
         return send(res, 200, { name: target.name, email: target.email, username: target.username, password });
       }
@@ -756,6 +801,7 @@ async function api(req, res, url) {
         need(target.id !== user.id, 'ما تقدر تحذف حسابك وأنت داخل فيه');
         need(target.role !== 'admin' || admins().length > 1, 'لازم يبقى مدير نظام واحد على الأقل');
         db.users = db.users.filter((u) => u !== target);
+        db.resetRequests = db.resetRequests.filter((r) => r.userId !== target.id);
         endSessions(target.id);
         save();
         audit(user, 'حذف حساب', target.username);

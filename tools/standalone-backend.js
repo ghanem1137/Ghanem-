@@ -107,6 +107,7 @@
     try { db = JSON.parse(ls.get(KEY)); } catch { db = null; }
     if (!db) { db = await seed(); persist(); }
     db.sections = normalizeSections(db.sections);
+    db.resetRequests = db.resetRequests || [];
     for (const u of db.users) { if (!ROLES[u.role]) u.role = u.isAdmin ? 'admin' : 'employee'; delete u.isAdmin; }
     if (!db.issue.logo && !db.issue.logoRemoved) db.issue.logo = DEFAULT_LOGO;
   }
@@ -228,6 +229,15 @@
       return { ok: true, role: u.role };
     }
     if (m === 'POST' && p === '/api/logout') { ls.del(SKEY); return { ok: true }; }
+    if (m === 'POST' && p === '/api/forgot') {
+      const login = str(body.login, 200).toLowerCase();
+      const t = login && db.users.find((u) => u.username === login || (u.email && u.email.toLowerCase() === login));
+      if (t && !db.resetRequests.some((r) => r.userId === t.id)) {
+        db.resetRequests.push({ id: rid(), userId: t.id, at: now() });
+        audit(t, 'طلب إعادة كلمة المرور'); save(); broadcast();
+      }
+      return { ok: true };
+    }
     if (m === 'GET' && p === '/api/brand') { const { title, orgName, orgNameEn, logo } = db.issue; return { title, orgName, orgNameEn, logo }; }
 
     const user = db.users.find((u) => u.id === ls.get(SKEY));
@@ -295,7 +305,7 @@
       need(p !== '/api/admin/logo' || can(user, 'settings'), 'تغيير هوية الجهة لمدير النظام فقط', 403);
       if (m !== 'GET' && !isUsers) audit(user, 'تعديل المحتوى', p.replace('/api/admin/', ''));
       if (m === 'GET' && p === '/api/admin/audit') { let log = []; try { log = JSON.parse(localStorage.getItem(AKEY)) || []; } catch { /* تجاهل */ } return { log }; }
-      if (m === 'GET' && p === '/api/admin/data') return { suggestions: db.suggestions, quiz: db.quiz, photos: db.photos, poll: db.poll, weather: db.weather };
+      if (m === 'GET' && p === '/api/admin/data') return { suggestions: db.suggestions, quiz: db.quiz, photos: db.photos, poll: db.poll, weather: db.weather, resetCount: can(user, 'users') ? db.resetRequests.length : 0 };
       mm = /^\/api\/admin\/section\/(\w+)$/.exec(p);
       if (m === 'PUT' && mm) {
         const key = mm[1];
@@ -388,7 +398,13 @@
         else { const s = db.suggestions.find((x) => x.id === mm[1]); if (s) s.done = !s.done; }
         save(); broadcast(); return { ok: true };
       }
-      if (m === 'GET' && p === '/api/admin/users') return { users: db.users.map(publicUser), roles: Object.keys(ROLES) };
+      if (m === 'GET' && p === '/api/admin/users') {
+        const resets = db.resetRequests.map((r) => ({ r, u: db.users.find((x) => x.id === r.userId) })).filter((x) => x.u)
+          .map(({ r, u }) => ({ id: r.id, at: r.at, userId: u.id, name: u.name, username: u.username, email: u.email }));
+        return { users: db.users.map(publicUser), roles: Object.keys(ROLES), resets };
+      }
+      mm = /^\/api\/admin\/resets\/(\w+)$/.exec(p);
+      if (m === 'DELETE' && mm) { db.resetRequests = db.resetRequests.filter((r) => r.id !== mm[1]); save(); return { ok: true }; }
       if (m === 'POST' && p === '/api/admin/users/import') {
         const created = []; const skipped = [];
         const role = ROLES[body.role] ? body.role : 'employee';
@@ -411,7 +427,9 @@
         const t = db.users.find((u) => u.id === mm[1]); need(t, 'الحساب غير موجود', 404);
         if (m === 'POST' && mm[2]) {
           const password = makePassword();
-          t.pass = await hashPassword(password); save();
+          t.pass = await hashPassword(password);
+          db.resetRequests = db.resetRequests.filter((r) => r.userId !== t.id);
+          audit(user, 'كلمة مرور جديدة', t.username); save();
           return { name: t.name, email: t.email, username: t.username, password };
         }
         if (m === 'PUT') {

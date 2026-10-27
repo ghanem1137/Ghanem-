@@ -462,3 +462,6 @@ dialog::backdrop { background: rgba(0, 0, 0, .4); }
 .dist-legend b { color: var(--muted); font-weight: 600; }
 .roles-legend { display: grid; gap: 8px; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); margin-top: 14px; }
 .roles-legend > div { display: grid; gap: 2px; background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; }
+.forgot-link { justify-self: center; font-size: .9rem; }
+.reset-req { border-top: 3px solid var(--c-maroon); margin-bottom: 16px; }
+.badge-red { background: var(--c-maroon); color: #fff; border-radius: 99px; padding: 0 8px; font-size: .78rem; font-weight: 700; margin-inline-start: 4px; }

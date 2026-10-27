@@ -22,7 +22,19 @@
     <label>كلمة المرور<input name="password" type="password" autocomplete="current-password" required dir="ltr"></label>
     <button class="btn">دخول</button>
     <p class="form-msg bad" role="alert"></p>
-    <p class="muted small">ما عندك حساب أو نسيت كلمة المرور؟ تواصل مع فريق النشرة.</p>
+    <button type="button" class="link-btn forgot-link" id="forgot-open">نسيت كلمة المرور؟</button>
+    <p class="muted small">ما عندك حساب؟ تواصل مع فريق النشرة.</p>
+  </form>
+
+  <form id="forgot" class="card form login" hidden>
+    <div class="login-head">
+      <h1>🔑 نسيت كلمة المرور؟</h1>
+      <p class="muted">اكتب اسم المستخدم أو إيميلك، ويوصل طلبك لمدير النظام، وبتوصلك كلمة مرور جديدة على إيميلك في أوتلوك.</p>
+    </div>
+    <label>اسم المستخدم أو الإيميل<input name="login" autocomplete="username" required dir="ltr"></label>
+    <button class="btn">أرسل الطلب</button>
+    <p class="form-msg" role="status"></p>
+    <button type="button" class="link-btn forgot-link" id="forgot-back">← الرجوع للدخول</button>
   </form>
   </main>
   <div id="toast" class="toast" role="status" hidden></div>
@@ -37,6 +49,26 @@
       const img = document.getElementById('org-logo');
       if (b.logo) { img.src = b.logo; img.alt = b.orgName || ''; img.hidden = false; document.getElementById('org-name').hidden = true; }
     }).catch(() => {});
+    // نسيت كلمة المرور
+    const fg = document.getElementById('forgot');
+    const swapForms = (showForgot) => {
+      f.hidden = showForgot; fg.hidden = !showForgot;
+      (showForgot ? fg.login : f.username).focus();
+    };
+    document.getElementById('forgot-open').onclick = () => { fg.login.value = f.username.value; swapForms(true); };
+    document.getElementById('forgot-back').onclick = () => swapForms(false);
+    fg.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const msg = fg.querySelector('.form-msg');
+      const btn = fg.querySelector('.btn');
+      btn.disabled = true;
+      try {
+        await api('/api/forgot', { method: 'POST', body: { login: fg.login.value } });
+        msg.classList.remove('bad');
+        msg.textContent = '✅ إذا كان الحساب موجود، وصل طلبك لمدير النظام وبتوصلك كلمة مرور جديدة على إيميلك.';
+      } catch (err) { msg.classList.add('bad'); msg.textContent = err.message; btn.disabled = false; }
+    });
+
     f.addEventListener('submit', async (e) => {
       e.preventDefault();
       const btn = f.querySelector('button');

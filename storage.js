@@ -35,6 +35,7 @@ CREATE TABLE IF NOT EXISTS likes (target_id TEXT NOT NULL, user_id TEXT NOT NULL
 CREATE TABLE IF NOT EXISTS poll_votes (user_id TEXT PRIMARY KEY, choice TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS quiz_answers (id TEXT PRIMARY KEY, user_id TEXT, name TEXT, dept TEXT, answer TEXT, created_at TEXT);
 CREATE TABLE IF NOT EXISTS suggestions (id TEXT PRIMARY KEY, name TEXT, type TEXT, text TEXT, link TEXT, created_at TEXT, done INTEGER NOT NULL DEFAULT 0);
+CREATE TABLE IF NOT EXISTS reset_requests (id TEXT PRIMARY KEY, user_id TEXT NOT NULL, requested_at TEXT NOT NULL, ip TEXT);
 CREATE TABLE IF NOT EXISTS audit_log (
   id INTEGER PRIMARY KEY AUTOINCREMENT, at TEXT NOT NULL, user_id TEXT, user_name TEXT, role TEXT, action TEXT NOT NULL, details TEXT
 );
@@ -82,6 +83,7 @@ function openStore(file) {
       users: all('SELECT * FROM users ORDER BY created_at').map((r) => ({
         id: r.id, name: r.name, email: r.email || '', username: r.username, pass: r.pass, role: r.role, createdAt: r.created_at, lastLogin: r.last_login,
       })),
+      resetRequests: all('SELECT * FROM reset_requests ORDER BY requested_at').map((r) => ({ id: r.id, userId: r.user_id, at: r.requested_at, ip: r.ip })),
       sessions: Object.fromEntries(all('SELECT * FROM sessions').map((r) => [r.token_hash, { userId: r.user_id, exp: r.expires_at }])),
     };
     for (const l of LISTS) db[l] = all('SELECT data FROM items WHERE list = ? ORDER BY position', l).map((r) => json(r.data, {}));
@@ -107,6 +109,10 @@ function openStore(file) {
       sql.exec('DELETE FROM users');
       const user = sql.prepare('INSERT INTO users (id, name, email, username, pass, role, created_at, last_login) VALUES (?, ?, ?, ?, ?, ?, ?, ?)');
       for (const u of db.users) user.run(u.id, u.name, u.email || '', u.username, u.pass, u.role, u.createdAt || null, u.lastLogin || null);
+
+      sql.exec('DELETE FROM reset_requests');
+      const rr = sql.prepare('INSERT INTO reset_requests (id, user_id, requested_at, ip) VALUES (?, ?, ?, ?)');
+      for (const r of db.resetRequests || []) rr.run(r.id, r.userId, r.at, r.ip || '');
 
       sql.exec('DELETE FROM sessions');
       const ses = sql.prepare('INSERT INTO sessions (token_hash, user_id, expires_at) VALUES (?, ?, ?)');
